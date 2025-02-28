@@ -72,6 +72,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>./4dm.h/networking/lib/*;./4dm.h/soil/soil2.lib;opengl32.lib;./4dm.h/glew32.lib;./4dm.h/glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>"$(ProjectDir)postbuild.bat" "$(TargetPath)" "$(ProjectDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -91,12 +94,19 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>./4dm.h/networking/lib/*;./4dm.h/soil/soil2.lib;opengl32.lib;./4dm.h/glew32.lib;./4dm.h/glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>"$(ProjectDir)postbuild.bat" "$(TargetPath)" "$(ProjectDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ItemBackpack.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="info.json5" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ItemBackpack.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1,4 +1,4 @@
-//#define DEBUG_CONSOLE // Uncomment this if you want a debug console to start. You can use the Console class to print. You can use Console::inStrings to get input.
+#define DEBUG_CONSOLE // Uncomment this if you want a debug console to start. You can use the Console class to print. You can use Console::inStrings to get input.
 
 #include <4dm.h>
 
@@ -7,27 +7,140 @@ using namespace fdm;
 // Initialize the DLLMain
 initDLL
 
-$hook(void, StateGame, init, StateManager& s)
-{
-	// Your code that runs at first frame here (it calls when you load into the world)
+std::vector<std::string> toolNames{
+	"Backpack",
+	"Reinforced Backpack",
+	"Deadly Backpack"
+};
 
-	original(self, s);
+std::vector<std::string> materialNames{
+	"Hyperfabric",
+	"Reinforced Hyperfabric",
+	"Deadly Hyperfabric"
+};
+
+
+// Item slot tool
+$hook(void, ItemTool, render, const glm::ivec2& pos)
+{
+	int index = std::find(toolNames.begin(), toolNames.end(), self->name) - toolNames.begin();
+
+	if (index == toolNames.size())
+		return original(self, pos);
+
+	TexRenderer& tr = *ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 0.3
+	const Tex2D* ogTex = tr.texture; // remember the original texture
+
+	tr.texture = ResourceManager::get("assets/Tools.png", true); // set to custom texture
+	tr.setClip(index * 36, 0, 36, 36);
+	tr.setPos(pos.x, pos.y, 70, 72);
+	tr.render();
+
+	tr.texture = ogTex; // return to the original texture
+}
+// Item slot material
+$hook(void, ItemMaterial, render, const glm::ivec2& pos)
+{
+	int index = std::find(materialNames.begin(), materialNames.end(), self->name) - materialNames.begin();
+	if (index == materialNames.size())
+		return original(self, pos);
+
+	TexRenderer& tr = *ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 0.3
+	const Tex2D* ogTex = tr.texture; // remember the original texture
+
+	tr.texture = ResourceManager::get("assets/Materials.png", true); // set to custom texture
+	tr.setClip(index * 36, 0, 36, 36);
+	tr.setPos(pos.x, pos.y, 70, 72);
+	tr.render();
+
+	tr.texture = ogTex; // return to the original texture
 }
 
-$hook(void, Player, update, World* world, double dt, EntityPlayer* entityPlayer)
+//Deadly text effect
+$hook(bool, ItemTool, isDeadly)
 {
-	// Your code that runs every frame here (it only calls when you play in world, because its Player's function)
-
-	original(self, world, dt, entityPlayer);
+	if (self->name == "Deadly Bakcpack")
+		return true;
+	return original(self);
+}
+$hook(bool, ItemMaterial, isDeadly)
+{
+	if (self->name == "Deadly Hyperfabric")
+		return true;
+	return original(self);
 }
 
-$hook(bool, Player, keyInput, GLFWwindow* window, World* world, int key, int scancode, int action, int mods)
+// add recipes
+$hookStatic(void, CraftingMenu, loadRecipes)
 {
-	// Your code that runs when Key Input happens (check GLFW Keyboard Input tutorials)|(it only calls when you play in world, because its Player's function)
+	static bool recipesLoaded = false;
 
-	return original(self, window, world, key, scancode, action, mods);
+	if (recipesLoaded) return;
+
+	recipesLoaded = true;
+
+	original();
+
+	CraftingMenu::recipes->push_back(
+		nlohmann::json{
+		{"recipe", {{{"name", "Hypersilk"}, {"count", 2}},{{"name", "Stick"}, {"count", 1}}}},
+		{"result", {{"name", "Hyperfabric"}, {"count", 1}}}
+		}
+	);
+
+	CraftingMenu::recipes->push_back(
+		nlohmann::json{
+		{"recipe", {{{"name", "Hyperfabric"}, {"count", 2}},{{"name", "Iron Bars"}, {"count", 2}}}},
+		{"result", {{"name", "Reinforced Hyperfabric"}, {"count", 1}}}
+		}
+	);
+
+	CraftingMenu::recipes->push_back(
+		nlohmann::json{
+		{"recipe", {{{"name", "Reinforced Hyperfabric"}, {"count", 2}},{{"name", "Deadly Bars"}, {"count", 2}}}},
+		{"result", {{"name", "Deadly Hyperfabric"}, {"count", 1}}}
+		}
+	);
+
+	CraftingMenu::recipes->push_back(
+		nlohmann::json{
+		{"recipe", {{{"name", "Hyperfabric"}, {"count", 3}}}},
+		{"result", {{"name", "Backpack"}, {"count", 1}}}
+		}
+	);
+
+	CraftingMenu::recipes->push_back(
+		nlohmann::json{
+		{"recipe", {{{"name", "Reinforced Hyperfabric"}, {"count", 2}}}},
+		{"result", {{"name", "Reinforced Backpack"}, {"count", 1}}}
+		}
+	);
+
+	CraftingMenu::recipes->push_back(
+		nlohmann::json{
+		{"recipe", {{{"name", "Deadly Hyperfabric"}, {"count", 2}}}},
+		{"result", {{"name", "Deadly Backpack"}, {"count", 1}}}
+		}
+	);
 }
 
+// add item blueprints, load shaders
+void initItemNAME()
+{
+	for (int i = 0;i < materialNames.size(); i++)
+		(*Item::blueprints)[materialNames[i]] =
+		{
+			{ "type", "material" },
+			{ "baseAttributes", nlohmann::json::object() } // no attributes
+		};
+
+	for (int i = 0;i < toolNames.size(); i++)
+		(*Item::blueprints)[toolNames[i]] =
+		{
+			{ "type", "tool" },
+			{ "baseAttributes", InventoryGrid().save()} // InventoryGrid 
+		};
+}
 $hook(void, StateIntro, init, StateManager& s)
 {
 	original(self, s);
@@ -36,4 +149,8 @@ $hook(void, StateIntro, init, StateManager& s)
 	glewExperimental = true;
 	glewInit();
 	glfwInit();
+
+	initItemNAME();
+
+	ShaderManager::load("backpackShader", "../../assets/shaders/tetNormal.vs", "assets/backpack.fs", "../../assets/shaders/tetNormal.gs");
 }
