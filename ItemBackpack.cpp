@@ -1,6 +1,30 @@
 #include "ItemBackpack.h"
 
-stl::string ItemBackpack::getName() { return "Backpack"; }
+stl::string ItemBackpack::getName() {
+	switch (type) {
+	case BackpackType::FABRIC:
+		return "Backpack";
+	case BackpackType::IRON:
+		return "Reinforced Backpack";
+	case BackpackType::DEADLY:
+		return "Deadly Backpack";
+	}
+	
+}
+
+void ItemBackpack::render(const glm::ivec2& pos) {
+	Console::printLine(getName());
+	TexRenderer& tr = *ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 0.3
+	const Tex2D* ogTex = tr.texture; // remember the original texture
+
+	tr.texture = ResourceManager::get("assets/Tools.png", true); // set to custom texture
+	tr.setClip(type * 36, 0, 36, 36);
+	tr.setPos(pos.x, pos.y, 70, 72);
+	tr.render();
+
+	tr.texture = ogTex; // return to the original texture
+}
+
 void ItemBackpack::renderEntity(const m4::Mat5& MV, bool inHand, const glm::vec4& lightDir) {
 	glm::vec3 color{ 1 };
 	if (this->type == DEADLY)
@@ -29,6 +53,7 @@ bool ItemBackpack::isDeadly() { return type == DEADLY; }
 uint32_t ItemBackpack::getStackLimit() { return 1; }
 bool ItemBackpack::action(World* world, Player* player, int action) {
 	Console::printLine(action);
+	return false;
 }
 void ItemBackpack::postAction(World* world, Player* player, int action) {
 	Console::printLine(action);

@@ -22,6 +22,7 @@ public:
 	InventoryGrid inventory;
 
 	stl::string getName() override;
+	void render(const glm::ivec2& pos) override;
 	void renderEntity(const m4::Mat5& MV, bool inHand, const glm::vec4& lightDir) override;
 	bool isDeadly() override;
 	uint32_t getStackLimit() override;

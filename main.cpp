@@ -1,6 +1,7 @@
 #define DEBUG_CONSOLE // Uncomment this if you want a debug console to start. You can use the Console class to print. You can use Console::inStrings to get input.
 
 #include <4dm.h>
+#include "ItemBackpack.h"
 
 using namespace fdm;
 
@@ -19,25 +20,6 @@ std::vector<std::string> materialNames{
 	"Deadly Hyperfabric"
 };
 
-
-// Item slot tool
-$hook(void, ItemTool, render, const glm::ivec2& pos)
-{
-	int index = std::find(toolNames.begin(), toolNames.end(), self->name) - toolNames.begin();
-
-	if (index == toolNames.size())
-		return original(self, pos);
-
-	TexRenderer& tr = *ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 0.3
-	const Tex2D* ogTex = tr.texture; // remember the original texture
-
-	tr.texture = ResourceManager::get("assets/Tools.png", true); // set to custom texture
-	tr.setClip(index * 36, 0, 36, 36);
-	tr.setPos(pos.x, pos.y, 70, 72);
-	tr.render();
-
-	tr.texture = ogTex; // return to the original texture
-}
 // Item slot material
 $hook(void, ItemMaterial, render, const glm::ivec2& pos)
 {
@@ -124,6 +106,27 @@ $hookStatic(void, CraftingMenu, loadRecipes)
 	);
 }
 
+// instantiating backpack item
+$hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& itemName, uint32_t count, const stl::string& type, const nlohmann::json& attributes) {
+	
+	if (itemName.find("Backpack") == std::string::npos)
+		return original(itemName, count, type, attributes);
+	ItemBackpack backpack;
+
+	if (itemName == "Backpack")
+		backpack.type = ItemBackpack::FABRIC;
+	else if (itemName == "Reinforced Backpack")
+		backpack.type = ItemBackpack::IRON;
+	else
+		backpack.type = ItemBackpack::DEADLY;
+
+	backpack.count = 1;
+
+	nlohmann::json constAttributes = attributes; // For some reason in InventoryGrid::load() attributes are not const
+	backpack.inventory.load(constAttributes);
+	return std::make_unique<Item>(backpack);
+}
+
 // add item blueprints, load shaders
 void initItemNAME()
 {
@@ -138,7 +141,7 @@ void initItemNAME()
 		(*Item::blueprints)[toolNames[i]] =
 		{
 			{ "type", "tool" },
-			{ "baseAttributes", InventoryGrid().save()} // InventoryGrid 
+			{ "baseAttributes", InventoryGrid().save()}
 		};
 }
 $hook(void, StateIntro, init, StateManager& s)
