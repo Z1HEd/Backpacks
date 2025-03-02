@@ -111,20 +111,17 @@ $hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& ite
 	
 	if (itemName.find("Backpack") == std::string::npos)
 		return original(itemName, count, type, attributes);
-	ItemBackpack backpack;
 
-	if (itemName == "Backpack")
-		backpack.type = ItemBackpack::FABRIC;
-	else if (itemName == "Reinforced Backpack")
-		backpack.type = ItemBackpack::IRON;
+	auto result = std::make_unique<ItemBackpack>();
+	result->type = (ItemBackpack::BackpackType)(int)attributes["type"];
+	if (!attributes["inventory"].empty()) {
+		result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
+		result->inventory->load(attributes["inventory"]);
+	}
 	else
-		backpack.type = ItemBackpack::DEADLY;
-
-	backpack.count = 1;
-
-	nlohmann::json constAttributes = attributes; // For some reason in InventoryGrid::load() attributes are not const
-	backpack.inventory.load(constAttributes);
-	return std::make_unique<Item>(backpack);
+		result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
+	result->count = count;
+	return result;
 }
 
 // add item blueprints, load shaders
@@ -140,10 +137,11 @@ void initItemNAME()
 	for (int i = 0;i < toolNames.size(); i++)
 		(*Item::blueprints)[toolNames[i]] =
 		{
-			{ "type", "tool" },
-			{ "baseAttributes", InventoryGrid().save()}
+			{ "type", "backpack" },
+			{ "baseAttributes", { { "type", i }, { "inventory", nlohmann::json::array() } } }
 		};
 }
+
 $hook(void, StateIntro, init, StateManager& s)
 {
 	original(self, s);

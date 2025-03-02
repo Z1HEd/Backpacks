@@ -12,8 +12,27 @@ stl::string ItemBackpack::getName() {
 	
 }
 
+bool ItemBackpack::action(World* world, Player* player, int action) {
+	if (!player->keys.rightMouseDown) return false;
+
+	
+	player->inventoryManager.primary = &player->playerInventory;
+	player->shouldResetMouse = true;
+	player->inventoryManager.secondary = inventory.get();
+
+
+	player->inventoryManager.craftingMenu.updateAvailableRecipes();
+	player->inventoryManager.updateCraftingMenuBox();
+
+	openInstance.inventory = inventory.get();
+	openInstance.manager = &player->inventoryManager;
+
+	inventory->renderPos = player->inventory.renderPos + glm::ivec2{290,0};
+
+	return true;
+}
+
 void ItemBackpack::render(const glm::ivec2& pos) {
-	Console::printLine(getName());
 	TexRenderer& tr = *ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 0.3
 	const Tex2D* ogTex = tr.texture; // remember the original texture
 
@@ -23,9 +42,12 @@ void ItemBackpack::render(const glm::ivec2& pos) {
 	tr.render();
 
 	tr.texture = ogTex; // return to the original texture
+
+	// inputs stuff
 }
 
 void ItemBackpack::renderEntity(const m4::Mat5& MV, bool inHand, const glm::vec4& lightDir) {
+
 	glm::vec3 color{ 1 };
 	if (this->type == DEADLY)
 		color = glm::vec3{ 232.0f / 255.0f, 77.0f / 255.0f, 193.0f / 255.0f } *1.4f;
@@ -51,11 +73,18 @@ void ItemBackpack::renderEntity(const m4::Mat5& MV, bool inHand, const glm::vec4
 }
 bool ItemBackpack::isDeadly() { return type == DEADLY; }
 uint32_t ItemBackpack::getStackLimit() { return 1; }
-bool ItemBackpack::action(World* world, Player* player, int action) {
-	Console::printLine(action);
-	return false;
+
+nlohmann::json ItemBackpack::saveAttributes() {
+	return { { "type", (int)type }, { "inventory", inventory->save() } };
 }
-void ItemBackpack::postAction(World* world, Player* player, int action) {
-	Console::printLine(action);
+
+std::unique_ptr<Item> ItemBackpack::clone() {
+  auto result = std::make_unique<ItemBackpack>();
+
+  result->type = type;
+  nlohmann::json inventoryAttributes = inventory->save();
+  result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
+  result->inventory->load(inventoryAttributes);
+
+  return result;
 }
-nlohmann::json ItemBackpack::saveAttributes() { return inventory.save(); }

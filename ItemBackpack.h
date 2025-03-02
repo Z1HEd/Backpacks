@@ -17,16 +17,20 @@ public:
 		{4,8},
 	};
 
+	bool isOpen = false;
 
-	BackpackType type;
-	InventoryGrid inventory;
+	BackpackType type = FABRIC;
+	std::unique_ptr<InventoryGrid> inventory;
+
+	std::unique_ptr<Item> clone() override;
 
 	stl::string getName() override;
+	bool action(World* world, Player* player, int action) override;
 	void render(const glm::ivec2& pos) override;
 	void renderEntity(const m4::Mat5& MV, bool inHand, const glm::vec4& lightDir) override;
 	bool isDeadly() override;
 	uint32_t getStackLimit() override;
-	bool action(World* world, Player* player, int action) override;
-	void postAction(World* world, Player* player, int action) override;
 	nlohmann::json saveAttributes() override;
+private:
+	InventorySession openInstance;
 };
