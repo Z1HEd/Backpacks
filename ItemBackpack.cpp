@@ -85,6 +85,5 @@ std::unique_ptr<Item> ItemBackpack::clone() {
   nlohmann::json inventoryAttributes = inventory->save();
   result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
   result->inventory->load(inventoryAttributes);
-
   return result;
 }

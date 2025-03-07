@@ -2,7 +2,9 @@
 
 #include <4dm.h>
 #include "ItemBackpack.h"
-
+// USED FOR HACKING PLAYER::THROWITEM
+//REMOVE BEFORE RELEASING
+#include <glm/gtc/random.hpp>
 using namespace fdm;
 
 // Initialize the DLLMain
@@ -122,6 +124,29 @@ $hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& ite
 		result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
 	result->count = count;
 	return result;
+}
+
+$hookStatic(std::unique_ptr<Entity>, EntityItem, createWithItem, const std::unique_ptr<Item>& item, const glm::vec4& pos, const glm::vec4& vel) {
+	Console::printLine("EntityItem::createWithItem: ",item.get());
+	return original(item, pos, vel);
+}
+
+$hook(void, Player, throwItem, World* world, std::unique_ptr<Item>& item, uint32_t maxCount) {
+	if (item == nullptr) return;
+
+	if (!dynamic_cast<ItemBackpack*>(item.get())) return original(self, world, item, maxCount);
+
+	
+	glm::vec3 randomVector = glm::ballRand(0.5f);
+	glm::vec4 velocity = {
+		self->forward.x * 10 + randomVector.x,
+		self->forward.y * 10 + randomVector.y,
+		self->forward.z * 10 + randomVector.z,
+		self->forward.w * 10 + randomVector.z // idc
+	};
+	std::unique_ptr<Entity> backpackEntity = EntityItem::createWithItem(item, self->cameraPos, velocity);
+	Chunk* chunk = world->getChunk(self->pos*0.125f);
+	world->addEntityToChunk(backpackEntity, chunk);
 }
 
 // add item blueprints, load shaders
