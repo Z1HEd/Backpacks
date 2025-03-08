@@ -152,7 +152,7 @@ $hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction ac
 			actualInventoryManager.secondary != nullptr && 
 			selectedSlot &&
 			dynamic_cast<ItemBackpack*>(selectedSlot.get()) &&
-			dynamic_cast<ItemBackpack*>(selectedSlot.get())->inventory.get() == actualInventoryManager.secondary
+			&dynamic_cast<ItemBackpack*>(selectedSlot.get())->inventory == actualInventoryManager.secondary
 			)
 		)
 		return true;
