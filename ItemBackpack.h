@@ -19,9 +19,9 @@ public:
 
 	BackpackType type = FABRIC;
 	std::unique_ptr<InventoryGrid> inventory;
-
+	static MeshRenderer renderer;
 	std::unique_ptr<Item> clone() override;
-
+	static void rendererInit();
 	stl::string getName() override;
 	bool action(World* world, Player* player, int action) override;
 	void render(const glm::ivec2& pos) override;

@@ -1,5 +1,7 @@
 #include "ItemBackpack.h"
 
+MeshRenderer ItemBackpack::renderer{};
+
 stl::string ItemBackpack::getName() {
 	switch (type) {
 	case BackpackType::FABRIC:
@@ -50,27 +52,42 @@ void ItemBackpack::renderEntity(const m4::Mat5& MV, bool inHand, const glm::vec4
 
 	glm::vec3 color{ 1 };
 	if (this->type == DEADLY)
-		color = glm::vec3{ 232.0f / 255.0f, 77.0f / 255.0f, 193.0f / 255.0f } *1.4f;
+		color = glm::vec3{ 232.0f / 255.0f, 77.0f / 255.0f, 193.0f / 255.0f };
 	else if (this->type == IRON)
-		color = glm::vec3{ 242.0f / 255.0f, 240.0f / 255.0f, 240.0f / 255.0f };
+		color = glm::vec3{ 181.0f / 255.0f, 179.0f / 255.0f, 174.0f / 255.0f };
 	else
-		color = glm::vec3{ 226.0f / 255.0f, 229.0f / 255.0f, 254.0f / 255.0f };
+		color = glm::vec3(201 / 255.0f, 206 / 255.0f, 255 / 255.0f);
 
 	m4::Mat5 material = MV;
 	material.translate(glm::vec4{ 0.0f, 0.0f, 0.0f, 0.001f });
 	material.scale(glm::vec4{ 0.5f });
 	material.translate(glm::vec4{ -0.5f, -0.5f, -0.5f, -0.5f });
 
-	const Shader* backpackShader = ShaderManager::get("backpackShader");
+	const Shader* shader = ShaderManager::get("tetSolidColorNormalShader");
 
-	backpackShader->use();
+	shader->use();
 
-	glUniform4f(glGetUniformLocation(backpackShader->id(), "lightDir"), lightDir.x, lightDir.y, lightDir.z, lightDir.w);
-	glUniform4f(glGetUniformLocation(backpackShader->id(), "inColor"), color.r, color.g, color.b, 1);
-	glUniform1fv(glGetUniformLocation(backpackShader->id(), "MV"), sizeof(material) / sizeof(float), &material[0][0]);
+	glUniform4f(glGetUniformLocation(shader->id(), "lightDir"), lightDir.x, lightDir.y, lightDir.z, lightDir.w);
+	glUniform4f(glGetUniformLocation(shader->id(), "inColor"), color.r, color.g, color.b, 1);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(material) / sizeof(float), &material[0][0]);
 
-	ItemTool::rockRenderer->render();
+	renderer.render();
 }
+
+void ItemBackpack::rendererInit() {
+	MeshBuilder mesh{ BlockInfo::HYPERCUBE_FULL_INDEX_COUNT };
+	// vertex position attribute
+	mesh.addBuff(BlockInfo::hypercube_full_verts, sizeof(BlockInfo::hypercube_full_verts));
+	mesh.addAttr(GL_UNSIGNED_BYTE, 4, sizeof(glm::u8vec4));
+	// per-cell normal attribute
+	mesh.addBuff(BlockInfo::hypercube_full_normals, sizeof(BlockInfo::hypercube_full_normals));
+	mesh.addAttr(GL_FLOAT, 1, sizeof(GLfloat));
+
+	mesh.setIndexBuff(BlockInfo::hypercube_full_indices, sizeof(BlockInfo::hypercube_full_indices));
+
+	renderer.setMesh(&mesh);
+}
+
 bool ItemBackpack::isDeadly() { return type == DEADLY; }
 uint32_t ItemBackpack::getStackLimit() { return 1; }
 

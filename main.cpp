@@ -123,14 +123,14 @@ $hook(void, Player, throwItem, World* world, std::unique_ptr<Item>& item, uint32
 
 	
 	glm::vec3 randomVector = glm::ballRand(0.5f);
-	glm::vec4 velocity = {
-		self->forward.x * 10 + randomVector.x,
+	glm::vec4 velocity = { 0.0f, 0.0f, 0.0f, 0.0f
+		/*self->forward.x * 10 + randomVector.x,
 		self->forward.y * 10 + randomVector.y,
 		self->forward.z * 10 + randomVector.z,
-		self->forward.w * 10 + randomVector.z // idc
+		self->forward.w * 10 + randomVector.z // idc */
 	};
 	std::unique_ptr<Entity> backpackEntity = EntityItem::createWithItem(item, self->cameraPos, velocity);
-	Chunk* chunk = world->getChunk(self->pos*0.125f);
+	Chunk* chunk = world->getChunkFromCoords(self->pos.x, self->pos.z, self->pos.w);
 	world->addEntityToChunk(backpackEntity, chunk);
 }
 
@@ -190,5 +190,5 @@ $hook(void, StateIntro, init, StateManager& s)
 
 	initItemNAME();
 
-	ShaderManager::load("backpackShader", "../../assets/shaders/tetNormal.vs", "assets/backpack.fs", "../../assets/shaders/tetNormal.gs");
+	ItemBackpack::rendererInit();
 }
