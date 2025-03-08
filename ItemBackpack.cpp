@@ -20,16 +20,16 @@ bool ItemBackpack::action(World* world, Player* player, int action) {
 	
 	player->inventoryManager.primary = &player->playerInventory;
 	player->shouldResetMouse = true;
-	player->inventoryManager.secondary = inventory.get();
+	player->inventoryManager.secondary = &inventory;
 
 
 	player->inventoryManager.craftingMenu.updateAvailableRecipes();
 	player->inventoryManager.updateCraftingMenuBox();
 
-	openInstance.inventory = inventory.get();
+	openInstance.inventory = &inventory;
 	openInstance.manager = &player->inventoryManager;
 
-	inventory->renderPos = player->inventory.renderPos + glm::ivec2{290,0};
+	inventory.renderPos = player->inventory.renderPos + glm::ivec2{397,50};
 
 	return true;
 }
@@ -92,35 +92,34 @@ bool ItemBackpack::isDeadly() { return type == DEADLY; }
 uint32_t ItemBackpack::getStackLimit() { return 1; }
 
 nlohmann::json ItemBackpack::saveAttributes() {
-	return { { "type", (int)type }, { "inventory", inventory->save() } };
+	return { { "type", (int)type }, { "inventory", inventory.save()}};
 }
 
 std::unique_ptr<Item> ItemBackpack::clone() {
   auto result = std::make_unique<ItemBackpack>();
 
   result->type = type;
-  nlohmann::json inventoryAttributes = inventory->save();
-  result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
-  result->inventory->load(inventoryAttributes);
-  result->inventory->name = "backpackInventory";
+  nlohmann::json inventoryAttributes = inventory.save();
+  result->inventory = InventoryGrid(result->sizes[result->type]);
+  result->inventory.load(inventoryAttributes);
+
   return result;
 }
 
 // instantiating backpack item
 $hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& itemName, uint32_t count, const stl::string& type, const nlohmann::json& attributes) {
-
+	
 	if (itemName.find("Backpack") == std::string::npos)
 		return original(itemName, count, type, attributes);
 
 	auto result = std::make_unique<ItemBackpack>();
 	result->type = (ItemBackpack::BackpackType)(int)attributes["type"];
 	if (!attributes["inventory"].empty()) {
-		result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
-		result->inventory->load(attributes["inventory"]);
+		result->inventory = InventoryGrid(result->sizes[result->type]);
+		result->inventory.load(attributes["inventory"]);
 	}
 	else
-		result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
-	result->inventory->name = "backpackInventory";
+		result->inventory = InventoryGrid(result->sizes[result->type]);
 	result->count = count;
 	return result;
 }
