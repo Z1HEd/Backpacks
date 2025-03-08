@@ -17,8 +17,6 @@ public:
 		{4,8},
 	};
 
-	bool isOpen = false;
-
 	BackpackType type = FABRIC;
 	std::unique_ptr<InventoryGrid> inventory;
 

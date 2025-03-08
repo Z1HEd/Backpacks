@@ -108,29 +108,14 @@ $hookStatic(void, CraftingMenu, loadRecipes)
 	);
 }
 
-// instantiating backpack item
-$hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& itemName, uint32_t count, const stl::string& type, const nlohmann::json& attributes) {
-	
-	if (itemName.find("Backpack") == std::string::npos)
-		return original(itemName, count, type, attributes);
 
-	auto result = std::make_unique<ItemBackpack>();
-	result->type = (ItemBackpack::BackpackType)(int)attributes["type"];
-	if (!attributes["inventory"].empty()) {
-		result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
-		result->inventory->load(attributes["inventory"]);
-	}
-	else
-		result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
-	result->count = count;
-	return result;
-}
 
 $hookStatic(std::unique_ptr<Entity>, EntityItem, createWithItem, const std::unique_ptr<Item>& item, const glm::vec4& pos, const glm::vec4& vel) {
 	Console::printLine("EntityItem::createWithItem: ",item.get());
 	return original(item, pos, vel);
 }
 
+// Reinvent dropping items
 $hook(void, Player, throwItem, World* world, std::unique_ptr<Item>& item, uint32_t maxCount) {
 	if (item == nullptr) return;
 
@@ -149,7 +134,34 @@ $hook(void, Player, throwItem, World* world, std::unique_ptr<Item>& item, uint32
 	world->addEntityToChunk(backpackEntity, chunk);
 }
 
-// add item blueprints, load shaders
+// Prevent player from doing bad stuff
+$hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction action, std::unique_ptr<Item>& selectedSlot, std::unique_ptr<Item>& cursorSlot, Inventory* other){
+
+	InventoryManager& actualInventoryManager = StateGame::instanceObj->player.inventoryManager; // self is bullshit, when taking stuff its nullptr lol
+
+	// How the fuck does this even work
+	if (
+		(// dont put backpacks into other backpacks
+			cursorSlot && 
+			actualInventoryManager.secondary != nullptr &&
+			actualInventoryManager.secondary->name == "backpackInventory" &&
+			actualInventoryManager.secondary != other &&
+			dynamic_cast<ItemBackpack*>(cursorSlot.get()) != nullptr
+			) ||
+		(// dont take an item that is an open backpack
+			actualInventoryManager.secondary != nullptr && 
+			selectedSlot &&
+			dynamic_cast<ItemBackpack*>(selectedSlot.get()) &&
+			dynamic_cast<ItemBackpack*>(selectedSlot.get())->inventory.get() == actualInventoryManager.secondary
+			)
+		)
+		return true;
+
+
+	return original(self, action, selectedSlot, cursorSlot, other);
+}
+
+// Add item blueprints, load shaders
 void initItemNAME()
 {
 	for (int i = 0;i < materialNames.size(); i++)

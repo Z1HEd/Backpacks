@@ -85,5 +85,25 @@ std::unique_ptr<Item> ItemBackpack::clone() {
   nlohmann::json inventoryAttributes = inventory->save();
   result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
   result->inventory->load(inventoryAttributes);
+  result->inventory->name = "backpackInventory";
   return result;
+}
+
+// instantiating backpack item
+$hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& itemName, uint32_t count, const stl::string& type, const nlohmann::json& attributes) {
+
+	if (itemName.find("Backpack") == std::string::npos)
+		return original(itemName, count, type, attributes);
+
+	auto result = std::make_unique<ItemBackpack>();
+	result->type = (ItemBackpack::BackpackType)(int)attributes["type"];
+	if (!attributes["inventory"].empty()) {
+		result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
+		result->inventory->load(attributes["inventory"]);
+	}
+	else
+		result->inventory = std::make_unique<InventoryGrid>(result->sizes[result->type]);
+	result->inventory->name = "backpackInventory";
+	result->count = count;
+	return result;
 }
