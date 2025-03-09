@@ -20,7 +20,8 @@ public:
 	BackpackType type = FABRIC;
 	InventoryGrid inventory;
 	static MeshRenderer renderer;
-	
+	static std::string openSound;
+
 	std::unique_ptr<Item> clone() override;
 	static void rendererInit();
 	stl::string getName() override;

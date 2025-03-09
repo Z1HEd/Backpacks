@@ -1,6 +1,7 @@
 #include "ItemBackpack.h"
 
 MeshRenderer ItemBackpack::renderer{};
+std::string ItemBackpack::openSound="";
 
 stl::string ItemBackpack::getName() {
 	switch (type) {
@@ -30,6 +31,8 @@ bool ItemBackpack::action(World* world, Player* player, int action) {
 	openInstance.manager = &player->inventoryManager;
 
 	inventory.renderPos =  glm::ivec2{397,50};
+
+	AudioManager::playSound4D(openSound, "ambience", player->cameraPos, { 0,0,0,0 });
 
 	return true;
 }

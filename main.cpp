@@ -38,6 +38,7 @@ $hook(void, ItemMaterial, render, const glm::ivec2& pos)
 	tr.render();
 
 	tr.texture = ogTex; // return to the original texture
+	
 }
 
 //Deadly text effect
@@ -117,11 +118,12 @@ $hookStatic(std::unique_ptr<Entity>, EntityItem, createWithItem, const std::uniq
 
 // Reinvent dropping items
 $hook(void, Player, throwItem, World* world, std::unique_ptr<Item>& item, uint32_t maxCount) {
+	
 	if (item == nullptr) return;
 
 	if (!dynamic_cast<ItemBackpack*>(item.get())) return original(self, world, item, maxCount);
 
-	
+
 	glm::vec3 randomVector = glm::ballRand(0.5f);
 	glm::vec4 velocity = { 0.0f, 0.0f, 0.0f, 0.0f
 		/*self->forward.x * 10 + randomVector.x,
@@ -129,9 +131,10 @@ $hook(void, Player, throwItem, World* world, std::unique_ptr<Item>& item, uint32
 		self->forward.z * 10 + randomVector.z,
 		self->forward.w * 10 + randomVector.z // idc */
 	};
-	std::unique_ptr<Entity> backpackEntity = EntityItem::createWithItem(item, self->cameraPos, velocity);
+	std::unique_ptr<Entity> backpackEntity = EntityItem::createWithItem(std::move(item), self->cameraPos, velocity);
 	Chunk* chunk = world->getChunkFromCoords(self->pos.x, self->pos.z, self->pos.w);
 	world->addEntityToChunk(backpackEntity, chunk);
+	//backpackEntity.release();
 }
 
 // Prevent player from doing bad stuff
@@ -161,7 +164,7 @@ $hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction ac
 	return original(self, action, selectedSlot, cursorSlot, other);
 }
 
-// Add item blueprints, load shaders
+// Initialize stuff
 void initItemNAME()
 {
 	for (int i = 0;i < materialNames.size(); i++)
@@ -189,6 +192,10 @@ $hook(void, StateIntro, init, StateManager& s)
 	glfwInit();
 
 	initItemNAME();
+
+	ItemBackpack::openSound = std::format("../../{}/assets/backpackOpen.ogg", fdm::getModPath(fdm::modID));
+
+	AudioManager::loadSound(ItemBackpack::openSound);
 
 	ItemBackpack::rendererInit();
 }
