@@ -42,12 +42,6 @@ $hook(void, ItemMaterial, render, const glm::ivec2& pos)
 }
 
 //Deadly text effect
-$hook(bool, ItemTool, isDeadly)
-{
-	if (self->name == "Deadly Bakcpack")
-		return true;
-	return original(self);
-}
 $hook(bool, ItemMaterial, isDeadly)
 {
 	if (self->name == "Deadly Hyperfabric")
