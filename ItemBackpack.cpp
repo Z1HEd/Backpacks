@@ -212,16 +212,15 @@ bool ItemBackpack::isCompatible(const std::unique_ptr<Item>& other)
 // instantiating backpack item
 $hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& itemName, uint32_t count, const stl::string& type, const nlohmann::json& attributes) {
 	
-	if (type == "backpack")
-	{
-		auto result = std::make_unique<ItemBackpack>();
-		result->type = (ItemBackpack::BackpackType)(int)attributes["type"];
-		result->inventory = InventoryGrid(ItemBackpack::sizes[result->type]);
-		result->inventory.load(attributes["inventory"]);
-		result->inventory.name = "backpackInventory";
-		result->inventory.label = std::format("{}:", result->getName());
-		result->count = count;
-		return result;
-	}
-	return original(itemName, count, type, attributes);
+	// I'm a never nester
+	if (type != "backpack") return original(itemName, count, type, attributes);
+
+	auto result = std::make_unique<ItemBackpack>();
+	result->type = (ItemBackpack::BackpackType)(int)attributes["type"];
+	result->inventory = InventoryGrid(ItemBackpack::sizes[result->type]);
+	result->inventory.load(attributes["inventory"]);
+	result->inventory.name = "backpackInventory";
+	result->inventory.label = std::format("{}:", result->getName());
+	result->count = count;
+	return result;
 }
