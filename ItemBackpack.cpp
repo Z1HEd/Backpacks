@@ -12,12 +12,11 @@ stl::string ItemBackpack::getName() {
 	case BackpackType::DEADLY:
 		return "Deadly Backpack";
 	}
-	
+	return "Backpack";
 }
 
 bool ItemBackpack::action(World* world, Player* player, int action) {
 	if (!player->keys.rightMouseDown || (player->inventoryManager.isOpen())) return false;
-
 	
 	player->inventoryManager.primary = &player->playerInventory;
 	player->shouldResetMouse = true;
@@ -30,7 +29,7 @@ bool ItemBackpack::action(World* world, Player* player, int action) {
 	openInstance.inventory = &inventory;
 	openInstance.manager = &player->inventoryManager;
 
-	inventory.renderPos =  glm::ivec2{397,50};
+	inventory.renderPos = glm::ivec2{397,50};
 
 	AudioManager::playSound4D(openSound, "ambience", player->cameraPos, { 0,0,0,0 });
 
@@ -38,7 +37,7 @@ bool ItemBackpack::action(World* world, Player* player, int action) {
 }
 
 void ItemBackpack::render(const glm::ivec2& pos) {
-	TexRenderer& tr = *ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 0.3
+	TexRenderer& tr = *ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 4dmodding v2.2
 	const Tex2D* ogTex = tr.texture; // remember the original texture
 
 	tr.texture = ResourceManager::get("assets/Tools.png", true); // set to custom texture
@@ -146,31 +145,31 @@ void ItemBackpack::renderEntity(const m4::Mat5& MV, bool inHand, const glm::vec4
 	glUniform4f(glGetUniformLocation(shader->id(), "lightDir"), lightDir.x, lightDir.y, lightDir.z, lightDir.w);
 	glUniform4f(glGetUniformLocation(shader->id(), "inColor"), color.r, color.g, color.b, 1);
 
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(materialLower) / sizeof(float), &materialLower[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &materialLower[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(materialUpper) / sizeof(float), &materialUpper[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &materialUpper[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(materialBottom) / sizeof(float), &materialBottom[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &materialBottom[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(materialMiddle) / sizeof(float), &materialMiddle[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &materialMiddle[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(handleLeft) / sizeof(float), &handleLeft[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &handleLeft[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(handleRight) / sizeof(float), &handleRight[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &handleRight[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(handleTop) / sizeof(float), &handleTop[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &handleTop[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(leftStrapTop) / sizeof(float), &leftStrapTop[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &leftStrapTop[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(leftStrapMid) / sizeof(float), &leftStrapMid[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &leftStrapMid[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(leftStrapBottom) / sizeof(float), &leftStrapBottom[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &leftStrapBottom[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(rightStrapTop) / sizeof(float), &rightStrapTop[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &rightStrapTop[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(rightStrapMid) / sizeof(float), &rightStrapMid[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &rightStrapMid[0][0]);
 	renderer.render();
-	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(rightStrapBottom) / sizeof(float), &rightStrapBottom[0][0]);
+	glUniform1fv(glGetUniformLocation(shader->id(), "MV"), sizeof(m4::Mat5) / sizeof(float), &rightStrapBottom[0][0]);
 	renderer.render();
 }
 
@@ -199,28 +198,30 @@ std::unique_ptr<Item> ItemBackpack::clone() {
   auto result = std::make_unique<ItemBackpack>();
 
   result->type = type;
-  nlohmann::json inventoryAttributes = inventory.save();
-  result->inventory = InventoryGrid(result->sizes[result->type]);
-  result->inventory.load(inventoryAttributes);
+  result->inventory = inventory;
   result->inventory.name = "backpackInventory";
   return result;
+}
+
+bool ItemBackpack::isCompatible(const std::unique_ptr<Item>& other)
+{
+	auto* backpack = dynamic_cast<ItemBackpack*>(other.get());
+	return backpack && backpack->type == type;
 }
 
 // instantiating backpack item
 $hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& itemName, uint32_t count, const stl::string& type, const nlohmann::json& attributes) {
 	
-	if (itemName.find("Backpack") == std::string::npos)
-		return original(itemName, count, type, attributes);
-
-	auto result = std::make_unique<ItemBackpack>();
-	result->type = (ItemBackpack::BackpackType)(int)attributes["type"];
-	if (!attributes["inventory"].empty()) {
-		result->inventory = InventoryGrid(result->sizes[result->type]);
+	if (type == "backpack")
+	{
+		auto result = std::make_unique<ItemBackpack>();
+		result->type = (ItemBackpack::BackpackType)(int)attributes["type"];
+		result->inventory = InventoryGrid(ItemBackpack::sizes[result->type]);
 		result->inventory.load(attributes["inventory"]);
+		result->inventory.name = "backpackInventory";
+		result->inventory.label = std::format("{}:", result->getName());
+		result->count = count;
+		return result;
 	}
-	else
-		result->inventory = InventoryGrid(result->sizes[result->type]);
-	result->inventory.name = "backpackInventory";
-	result->count = count;
-	return result;
+	return original(itemName, count, type, attributes);
 }

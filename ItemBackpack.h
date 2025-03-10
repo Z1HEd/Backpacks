@@ -11,10 +11,11 @@ public:
 		IRON,
 		DEADLY
 	};
-	glm::ivec2 sizes[3] = {
-		{1,8},
-		{2,8},
-		{4,8},
+	inline static constexpr glm::ivec2 sizes[3]
+	{
+		{ 1, 8 },
+		{ 2, 8 },
+		{ 4, 8 },
 	};
 
 	BackpackType type = FABRIC;
@@ -31,6 +32,7 @@ public:
 	bool isDeadly() override;
 	uint32_t getStackLimit() override;
 	nlohmann::json saveAttributes() override;
+	bool isCompatible(const std::unique_ptr<Item>& other) override;
 private:
 	InventorySession openInstance;
 };
