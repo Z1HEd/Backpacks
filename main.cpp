@@ -110,27 +110,6 @@ $hookStatic(std::unique_ptr<Entity>, EntityItem, createWithItem, const std::uniq
 	return original(item, pos, vel);
 }
 
-// Reinvent dropping items
-$hook(void, Player, throwItem, World* world, std::unique_ptr<Item>& item, uint32_t maxCount) {
-	
-	if (item == nullptr) return;
-
-	if (!dynamic_cast<ItemBackpack*>(item.get())) return original(self, world, item, maxCount);
-
-
-	glm::vec3 randomVector = glm::ballRand(0.5f);
-	glm::vec4 velocity = { 0.0f, 0.0f, 0.0f, 0.0f
-		/*self->forward.x * 10 + randomVector.x,
-		self->forward.y * 10 + randomVector.y,
-		self->forward.z * 10 + randomVector.z,
-		self->forward.w * 10 + randomVector.z // idc */
-	};
-	std::unique_ptr<Entity> backpackEntity = EntityItem::createWithItem(std::move(item), self->cameraPos, velocity);
-	Chunk* chunk = world->getChunkFromCoords(self->pos.x, self->pos.z, self->pos.w);
-	world->addEntityToChunk(backpackEntity, chunk);
-	//backpackEntity.release();
-}
-
 // Prevent player from doing bad stuff
 $hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction action, std::unique_ptr<Item>& selectedSlot, std::unique_ptr<Item>& cursorSlot, Inventory* other){
 
