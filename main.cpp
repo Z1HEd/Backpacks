@@ -1,4 +1,4 @@
-#define DEBUG_CONSOLE // Uncomment this if you want a debug console to start. You can use the Console class to print. You can use Console::inStrings to get input.
+//#define DEBUG_CONSOLE // Uncomment this if you want a debug console to start. You can use the Console class to print. You can use Console::inStrings to get input.
 
 #include <4dm.h>
 #include "ItemBackpack.h"
@@ -98,13 +98,6 @@ $hookStatic(void, CraftingMenu, loadRecipes)
 		{"result", {{"name", "Deadly Backpack"}, {"count", 1}}}
 		}
 	);
-}
-
-
-
-$hookStatic(std::unique_ptr<Entity>, EntityItem, createWithItem, const std::unique_ptr<Item>& item, const glm::vec4& pos, const glm::vec4& vel) {
-	Console::printLine("EntityItem::createWithItem: ",item.get());
-	return original(item, pos, vel);
 }
 
 // Prevent player from doing bad stuff
