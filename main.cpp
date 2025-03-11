@@ -2,9 +2,6 @@
 
 #include <4dm.h>
 #include "ItemBackpack.h"
-// USED FOR HACKING PLAYER::THROWITEM
-//REMOVE BEFORE RELEASING
-#include <glm/gtc/random.hpp>
 using namespace fdm;
 
 // Initialize the DLLMain
