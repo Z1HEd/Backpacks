@@ -12,7 +12,6 @@ std::vector<std::string> toolNames{
 	"Reinforced Backpack",
 	"Deadly Backpack"
 };
-
 std::vector<std::string> materialNames{
 	"Hyperfabric",
 	"Reinforced Hyperfabric",
@@ -38,6 +37,77 @@ $hook(void, ItemMaterial, render, const glm::ivec2& pos)
 	
 }
 
+// Backpack quick access
+bool handleBackpackAccess(Player& player, int mouseX,int mouseY) {
+	static std::unique_ptr<Item>* itemFromBackpack = nullptr;
+	static int index = -1;
+	static enum BackpackAccessMode {
+		Storing,
+		Accessing,
+		None
+	};
+	static BackpackAccessMode accessMode = None;
+	static ItemBackpack* backpack = nullptr;
+	static std::unique_ptr<Item>* itemInSlot = nullptr;
+
+
+	InventoryManager& manager = player.inventoryManager;
+
+	if (!manager.isOpen()) return false; // Inventory is closed
+
+	backpack = dynamic_cast<ItemBackpack*>(manager.cursor.item.get());
+
+	if (backpack == nullptr) return false; // Not holding a backpack
+
+	if (!player.keys.rightMouseDown) { // Not pressing RMB
+		accessMode = None;
+		return false;
+	}
+
+	// Find targeted slot
+	index = manager.primary->getSlotIndex({ mouseX,mouseY });
+	itemInSlot = nullptr;
+
+	if (index != -1)
+		itemInSlot = manager.primary->getSlot(index);
+	else {
+		index = manager.secondary->getSlotIndex({ mouseX,mouseY });
+		if (index != -1)
+			itemInSlot = manager.secondary->getSlot(index);
+	}
+
+	if (!itemInSlot) return true; // Didnt even target a slot
+
+	if (accessMode == None && itemInSlot->get() == nullptr) { // Slot is empty, get to accesing backpack
+		accessMode = Accessing;
+	}
+	else if (accessMode == None) { // Slot is not empty, get to storing stuff in a backpack 
+		accessMode = Storing;
+	}
+
+	if (itemInSlot->get() == nullptr && accessMode == Accessing) { // Slot is empty, put stuff from backpack into it
+		itemFromBackpack = backpack->getLastItem();
+		if (itemFromBackpack == nullptr) return true;
+		// Lol i could do that directly
+		manager.applyTransfer(InventoryManager::ACTION_SWAP, *itemFromBackpack, *itemInSlot, manager.secondary);
+		manager.craftingMenu.updateAvailableRecipes();
+		manager.updateCraftingMenuBox();
+	}
+	else if (accessMode == Storing) { // Slot is not empty, put stuff from it into backpack 
+		backpack->inventory.addItem(*itemInSlot);
+		manager.craftingMenu.updateAvailableRecipes();
+		manager.updateCraftingMenuBox();
+	}
+	return true;
+}
+$hook(void, Player, mouseInput, GLFWwindow* window, World* world, double xpos, double ypos) {
+	if (!handleBackpackAccess(*self, xpos, ypos)) return original(self, window, world, xpos, ypos);
+}
+$hook(bool, InventoryManager, mouseButtonInput, uint32_t x, uint32_t y, uint32_t button, int action, int mods) {
+	if (!handleBackpackAccess(StateGame::instanceObj->player, x, y)) return original(self, x,y,button,action,mods);
+	return true;
+}
+
 //Deadly text effect
 $hook(bool, ItemMaterial, isDeadly)
 {
@@ -46,7 +116,7 @@ $hook(bool, ItemMaterial, isDeadly)
 	return original(self);
 }
 
-// add recipes
+// A dd recipes
 $hookStatic(void, CraftingMenu, loadRecipes)
 {
 	static bool recipesLoaded = false;

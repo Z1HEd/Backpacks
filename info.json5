@@ -11,7 +11,7 @@ which are crafted with 2 Reinforced Hyperfabric and 2 Deadly Bars.\n \
 When holding a backpack, press RMB to open it. Backpack has capacity of 1/4 of a chest,\n \
 Reinforced Backpack-1/2 of a chest, and Deadly Backpack- a whole chest.\n \
 Backpacks cannot be stored in other Backpacks.",
-  version: "1.0",
+  version: "1.1",
   gameVersion: "0.2.1.4",
   modDLL: "4DMod.dll",
   externalDLLs: [

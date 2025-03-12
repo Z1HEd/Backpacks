@@ -15,6 +15,22 @@ stl::string ItemBackpack::getName() {
 	return "Backpack";
 }
 
+std::unique_ptr<Item>* ItemBackpack::getFirstItem() {
+	for (int i = 0;i < inventory.getSlotCount();i++) {
+		auto slot = inventory.getSlot(i);
+		if (slot && slot->get()) return slot;
+	}
+	return nullptr;
+}
+
+std::unique_ptr<Item>* ItemBackpack::getLastItem() {
+	for (int i = inventory.getSlotCount() - 1;i>=0;i--) {
+		auto slot = inventory.getSlot(i);
+		if (slot && slot->get()) return slot;
+	}
+	return nullptr;
+}
+
 bool ItemBackpack::action(World* world, Player* player, int action) {
 	if (!player->keys.rightMouseDown || (player->inventoryManager.isOpen())) return false;
 	
