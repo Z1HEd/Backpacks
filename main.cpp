@@ -25,7 +25,7 @@ $hook(void, ItemMaterial, render, const glm::ivec2& pos)
 	if (index == materialNames.size())
 		return original(self, pos);
 
-	TexRenderer& tr = *ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 0.3
+	TexRenderer& tr = ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 0.3
 	const Tex2D* ogTex = tr.texture; // remember the original texture
 
 	tr.texture = ResourceManager::get("assets/Materials.png", true); // set to custom texture
@@ -69,11 +69,11 @@ bool handleBackpackAccess(Player& player, int mouseX,int mouseY) {
 	itemInSlot = nullptr;
 
 	if (index != -1)
-		itemInSlot = manager.primary->getSlot(index);
+		itemInSlot = &manager.primary->getSlot(index);
 	else {
 		index = manager.secondary->getSlotIndex({ mouseX,mouseY });
 		if (index != -1)
-			itemInSlot = manager.secondary->getSlot(index);
+			itemInSlot = &manager.secondary->getSlot(index);
 	}
 
 	if (!itemInSlot) return true; // Didnt even target a slot
@@ -104,7 +104,7 @@ $hook(void, Player, mouseInput, GLFWwindow* window, World* world, double xpos, d
 	if (!handleBackpackAccess(*self, xpos, ypos)) return original(self, window, world, xpos, ypos);
 }
 $hook(bool, InventoryManager, mouseButtonInput, uint32_t x, uint32_t y, uint32_t button, int action, int mods) {
-	if (!handleBackpackAccess(StateGame::instanceObj->player, x, y)) return original(self, x,y,button,action,mods);
+	if (!handleBackpackAccess(StateGame::instanceObj.player, x, y)) return original(self, x,y,button,action,mods);
 	return true;
 }
 
@@ -127,42 +127,42 @@ $hookStatic(void, CraftingMenu, loadRecipes)
 
 	original();
 
-	CraftingMenu::recipes->push_back(
+	CraftingMenu::recipes.push_back(
 		nlohmann::json{
 		{"recipe", {{{"name", "Hypersilk"}, {"count", 2}},{{"name", "Stick"}, {"count", 1}}}},
 		{"result", {{"name", "Hyperfabric"}, {"count", 1}}}
 		}
 	);
 
-	CraftingMenu::recipes->push_back(
+	CraftingMenu::recipes.push_back(
 		nlohmann::json{
 		{"recipe", {{{"name", "Hyperfabric"}, {"count", 2}},{{"name", "Iron Bars"}, {"count", 2}}}},
 		{"result", {{"name", "Reinforced Hyperfabric"}, {"count", 1}}}
 		}
 	);
 
-	CraftingMenu::recipes->push_back(
+	CraftingMenu::recipes.push_back(
 		nlohmann::json{
 		{"recipe", {{{"name", "Reinforced Hyperfabric"}, {"count", 2}},{{"name", "Deadly Bars"}, {"count", 2}}}},
 		{"result", {{"name", "Deadly Hyperfabric"}, {"count", 1}}}
 		}
 	);
 
-	CraftingMenu::recipes->push_back(
+	CraftingMenu::recipes.push_back(
 		nlohmann::json{
 		{"recipe", {{{"name", "Hyperfabric"}, {"count", 3}}}},
 		{"result", {{"name", "Backpack"}, {"count", 1}}}
 		}
 	);
 
-	CraftingMenu::recipes->push_back(
+	CraftingMenu::recipes.push_back(
 		nlohmann::json{
 		{"recipe", {{{"name", "Reinforced Hyperfabric"}, {"count", 2}}}},
 		{"result", {{"name", "Reinforced Backpack"}, {"count", 1}}}
 		}
 	);
 
-	CraftingMenu::recipes->push_back(
+	CraftingMenu::recipes.push_back(
 		nlohmann::json{
 		{"recipe", {{{"name", "Deadly Hyperfabric"}, {"count", 2}}}},
 		{"result", {{"name", "Deadly Backpack"}, {"count", 1}}}
@@ -173,7 +173,7 @@ $hookStatic(void, CraftingMenu, loadRecipes)
 // Prevent player from doing bad stuff
 $hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction action, std::unique_ptr<Item>& selectedSlot, std::unique_ptr<Item>& cursorSlot, Inventory* other){
 
-	InventoryManager& actualInventoryManager = StateGame::instanceObj->player.inventoryManager; // self is bullshit, when taking stuff its nullptr lol
+	InventoryManager& actualInventoryManager = StateGame::instanceObj.player.inventoryManager; // self is bullshit, when taking stuff its nullptr lol
 
 	// How the fuck does this even work
 	if (
@@ -201,14 +201,14 @@ $hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction ac
 void initItemNAME()
 {
 	for (int i = 0;i < materialNames.size(); i++)
-		(*Item::blueprints)[materialNames[i]] =
+		Item::blueprints[materialNames[i]] =
 		{
 			{ "type", "material" },
 			{ "baseAttributes", nlohmann::json::object() } // no attributes
 		};
 
 	for (int i = 0;i < toolNames.size(); i++)
-		(*Item::blueprints)[toolNames[i]] =
+		Item::blueprints[toolNames[i]] =
 		{
 			{ "type", "backpack" },
 			{ "baseAttributes", { { "type", i }, { "inventory", nlohmann::json::array() } } }

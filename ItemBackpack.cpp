@@ -17,7 +17,7 @@ stl::string ItemBackpack::getName() {
 
 std::unique_ptr<Item>* ItemBackpack::getFirstItem() {
 	for (int i = 0;i < inventory.getSlotCount();i++) {
-		auto slot = inventory.getSlot(i);
+		auto* slot = &inventory.getSlot(i);
 		if (slot && slot->get()) return slot;
 	}
 	return nullptr;
@@ -25,7 +25,7 @@ std::unique_ptr<Item>* ItemBackpack::getFirstItem() {
 
 std::unique_ptr<Item>* ItemBackpack::getLastItem() {
 	for (int i = inventory.getSlotCount() - 1;i>=0;i--) {
-		auto slot = inventory.getSlot(i);
+		auto* slot = &inventory.getSlot(i);
 		if (slot && slot->get()) return slot;
 	}
 	return nullptr;
@@ -53,7 +53,7 @@ bool ItemBackpack::action(World* world, Player* player, int action) {
 }
 
 void ItemBackpack::render(const glm::ivec2& pos) {
-	TexRenderer& tr = *ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 4dmodding v2.2
+	TexRenderer& tr = ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 4dmodding v2.2
 	const Tex2D* ogTex = tr.texture; // remember the original texture
 
 	tr.texture = ResourceManager::get("assets/Tools.png", true); // set to custom texture
