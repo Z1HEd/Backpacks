@@ -3,6 +3,83 @@
 MeshRenderer ItemBackpack::renderer{};
 std::string ItemBackpack::openSound="";
 
+InventoryGrid playerWormholeInventory = {};
+
+// Wormhole inventory
+
+InventoryGrid& ItemBackpack::getUsedInventory() {
+	return type == WORMHOLE ? playerWormholeInventory : inventory;
+}
+
+$hook(nlohmann::json&, Player, save, nlohmann::json* _) {
+	nlohmann::json& ret = original(self, _);
+	
+	ret["wormholeInventory"] = playerWormholeInventory.save();
+
+	return ret;
+}
+
+$hook(void, Player, load, nlohmann::json& j) {
+	original(self, j);
+
+	playerWormholeInventory = InventoryGrid(ItemBackpack::sizes[ItemBackpack::WORMHOLE]);
+	if (j.contains("wormholeInventory")) {
+		playerWormholeInventory.load(j["wormholeInventory"]);
+		playerWormholeInventory.name = "wormholeInventory";
+		playerWormholeInventory.label = std::format("Wormhole Backpack");
+	}
+}
+
+// Solenoid backpack effect
+void applySolenoidEffect(World* world, Player* player) {
+	int xPlayer, zPlayer, wPlayer;
+	xPlayer = std::roundf( player->pos.x / 8);
+	zPlayer = std::roundf(player->pos.z / 8);
+	wPlayer = std::roundf(player->pos.w / 8);
+
+	for (int x = 0;x < 2;x++)
+		for (int z = 0;z < 2;z++)
+			for (int w = 0;w < 2;w++)
+			{
+				
+				Chunk* chunk = world->getChunk(glm::i64vec3{ x+xPlayer-1,z + zPlayer-1,w + wPlayer-1 });
+				if (!chunk) 
+					continue;
+				for (auto entity : chunk->entities) {
+					if (entity->getName() != "Item") continue;
+					glm::vec4 towardsPlayer = player->pos - entity->getPos();
+					float distance = glm::length(towardsPlayer);
+					if (distance < 8) {
+						((EntityItem*)entity)->hitbox.deltaVel += towardsPlayer / (distance)*0.15f;
+						((EntityItem*)entity)->combineWithNearby(world);
+					}
+					
+				}
+			}
+
+}
+
+$hook(void, Player, update,World* world, double dt) {
+	original(self, world, dt);
+	ItemBackpack* backpack = dynamic_cast<ItemBackpack*>(self->hotbar.getSlot(self->hotbar.selectedIndex).get());
+	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(self->equipment.getSlot(0).get());
+	if (!backpack) return;
+	if (backpack->type == ItemBackpack::SOLENOID && backpack->isSolenoidEffectActive) applySolenoidEffect(world, self);
+}
+
+// Automatically store items in solenoid backpack
+
+$hook(void, WorldSingleplayer, localPlayerEvent, Player* player, Packet::ClientPacket eventType, int64_t eventValue, void* data) {
+	if (eventType != Packet::C_ITEM_COLLECT) return original(self, player, eventType, eventValue, data);
+	
+	ItemBackpack* backpack = dynamic_cast<ItemBackpack*>(player->hotbar.getSlot(player->hotbar.selectedIndex).get());
+	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(player->equipment.getSlot(0).get());
+	if (!backpack) return original(self, player, eventType, eventValue, data);
+	if (backpack->type != ItemBackpack::SOLENOID || !backpack->isSolenoidEffectActive) return original(self, player, eventType, eventValue, data);
+	if (dynamic_cast<ItemBackpack*>(((EntityItem*)data)->item.get()))  return original(self, player, eventType, eventValue, data);
+	((EntityItem*)data)->give(&backpack->inventory, eventType);
+}
+
 stl::string ItemBackpack::getName() {
 	switch (type) {
 	case BackpackType::FABRIC:
@@ -11,70 +88,102 @@ stl::string ItemBackpack::getName() {
 		return "Reinforced Backpack";
 	case BackpackType::DEADLY:
 		return "Deadly Backpack";
+	case BackpackType::SOLENOID:
+		return "Solenoid Backpack";
+	case BackpackType::WORMHOLE:
+		return "Wormhole Backpack";
 	}
+
 	return "Backpack";
 }
 
 std::unique_ptr<Item>* ItemBackpack::getFirstItem() {
-	for (int i = 0;i < inventory.getSlotCount();i++) {
-		auto* slot = &inventory.getSlot(i);
+	InventoryGrid& usedInventory = getUsedInventory();
+	for (uint32_t i = 0;i < usedInventory.getSlotCount();i++) {
+		auto* slot = &usedInventory.getSlot(i);
 		if (slot && slot->get()) return slot;
 	}
 	return nullptr;
 }
 
 std::unique_ptr<Item>* ItemBackpack::getLastItem() {
-	for (int i = inventory.getSlotCount() - 1;i>=0;i--) {
-		auto* slot = &inventory.getSlot(i);
+	InventoryGrid& usedInventory = getUsedInventory();
+	for (int i = usedInventory.getSlotCount() - 1;i>=0;i--) {
+		auto* slot = &usedInventory.getSlot(i);
 		if (slot && slot->get()) return slot;
 	}
 	return nullptr;
 }
 
-bool ItemBackpack::action(World* world, Player* player, int action) {
-	if (!player->keys.rightMouseDown || (player->inventoryManager.isOpen())) return false;
-	
-	player->inventoryManager.primary = &player->playerInventory;
-	player->shouldResetMouse = true;
-	player->inventoryManager.secondary = &inventory;
+$hook(void,Player, mouseButtonInput, GLFWwindow* window, World* world, int button, int action, int mods) {
+	ItemBackpack* backpack;
+	backpack = dynamic_cast<ItemBackpack*>(self->hotbar.getSlot(self->hotbar.selectedIndex).get());
+	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(self->equipment.getSlot(0).get());
+	if (!backpack) return original(self, window, world, button, action, mods);
+
+	if (self->inventoryManager.isOpen()) return original(self, window, world, button, action, mods);
+	if (action != GLFW_PRESS || button!=GLFW_MOUSE_BUTTON_2) return original(self, window, world, button, action, mods);
+
+	if (self->keys.shift) {
+		backpack->isSolenoidEffectActive = !backpack->isSolenoidEffectActive;
+		return;
+	}
+
+	self->inventoryManager.primary = &self->playerInventory;
+	self->shouldResetMouse = true;
+	self->inventoryManager.secondary = backpack->type == ItemBackpack::WORMHOLE ? &playerWormholeInventory : &backpack->inventory;
 
 
-	player->inventoryManager.craftingMenu.updateAvailableRecipes();
-	player->inventoryManager.updateCraftingMenuBox();
+	self->inventoryManager.craftingMenu.updateAvailableRecipes();
+	self->inventoryManager.updateCraftingMenuBox();
 
-	openInstance.inventory = &inventory;
-	openInstance.manager = &player->inventoryManager;
+	backpack->openInstance.inventory = &backpack->inventory;
+	backpack->openInstance.manager = &self->inventoryManager;
 
-	inventory.renderPos = glm::ivec2{397,50};
+	((InventoryGrid*)self->inventoryManager.secondary)->renderPos = glm::ivec2{ 397,50 };
 
-	AudioManager::playSound4D(openSound, "ambience", player->cameraPos, { 0,0,0,0 });
-
-	return true;
+	AudioManager::playSound4D(ItemBackpack::openSound, "ambience", self->cameraPos, { 0,0,0,0 });
 }
 
 void ItemBackpack::render(const glm::ivec2& pos) {
 	TexRenderer& tr = ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 4dmodding v2.2
 	const Tex2D* ogTex = tr.texture; // remember the original texture
 
-	tr.texture = ResourceManager::get("assets/Tools.png", true); // set to custom texture
-	tr.setClip(type * 36, 0, 36, 36);
+	static std::string iconPath = "";
+	iconPath = std::format("{}{}.png", "assets/", this->getName().c_str());
+	iconPath.erase(remove(iconPath.begin(), iconPath.end(), ' '), iconPath.end());
+
+	tr.texture = ResourceManager::get(iconPath, true); // set to custom texture
+	tr.setClip(0, 0, 36, 36);
 	tr.setPos(pos.x, pos.y, 70, 72);
 	tr.render();
 
 	tr.texture = ogTex; // return to the original texture
-
-	// inputs stuff
 }
 
 void ItemBackpack::renderEntity(const m4::Mat5& MV, bool inHand, const glm::vec4& lightDir) {
 
 	glm::vec3 color{ 1 };
-	if (this->type == DEADLY)
-		color = glm::vec3{ 188.0f / 255.0f, 74.0f / 255.0f, 153.0f / 255.0f };
-	else if (this->type == IRON)
-		color = glm::vec3{ 181.0f / 255.0f, 179.0f / 255.0f, 174.0f / 255.0f };
-	else
+
+	switch (type) {
+	case BackpackType::FABRIC:
 		color = glm::vec3(201 / 255.0f, 206 / 255.0f, 255 / 255.0f);
+		break;
+	case BackpackType::IRON:
+		color = glm::vec3{ 181.0f / 255.0f, 179.0f / 255.0f, 174.0f / 255.0f };
+		break;
+	case BackpackType::DEADLY:
+		color = glm::vec3{ 188.0f / 255.0f, 74.0f / 255.0f, 153.0f / 255.0f };
+		break;
+	case BackpackType::SOLENOID:
+		color = glm::vec3{ 197.0f / 255.0f, 62.0f / 255.0f, 107.0f / 255.0f };
+		if (!isSolenoidEffectActive)
+			color *= 0.8f;
+		break;
+	case BackpackType::WORMHOLE:
+		color = glm::vec3{ 34.0f / 255.0f, 29.0f / 255.0f, 50.0f / 255.0f };
+		break;
+	}
 
 	m4::Mat5 materialLower = MV;
 	materialLower.translate(glm::vec4{ 0.0f, 0.0f, 0.0f, 0.001f });
@@ -207,13 +316,14 @@ bool ItemBackpack::isDeadly() { return type == DEADLY; }
 uint32_t ItemBackpack::getStackLimit() { return 1; }
 
 nlohmann::json ItemBackpack::saveAttributes() {
-	return { { "type", (int)type }, { "inventory", inventory.save()}};
+	return { { "type", (int)type }, { "inventory", inventory.save()},{"isSolenoidEffectActive",isSolenoidEffectActive}};
 }
 
 std::unique_ptr<Item> ItemBackpack::clone() {
   auto result = std::make_unique<ItemBackpack>();
 
   result->type = type;
+  result->isSolenoidEffectActive = isSolenoidEffectActive;
   result->inventory = inventory;
   result->inventory.name = "backpackInventory";
   return result;
@@ -233,9 +343,11 @@ $hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& ite
 
 	auto result = std::make_unique<ItemBackpack>();
 	result->type = (ItemBackpack::BackpackType)(int)attributes["type"];
+	if (attributes.contains("isSolenoidEffectActive"))
+		result->isSolenoidEffectActive = attributes["isSolenoidEffectActive"];
 	result->inventory = InventoryGrid(ItemBackpack::sizes[result->type]);
 	result->inventory.load(attributes["inventory"]);
-	result->inventory.name = "backpackInventory";
+	result->inventory.name = result->type==ItemBackpack::WORMHOLE ? "wormholeInventory" : "backpackInventory";
 	result->inventory.label = std::format("{}:", result->getName());
 	result->count = count;
 	return result;

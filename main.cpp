@@ -7,41 +7,76 @@ using namespace fdm;
 // Initialize the DLLMain
 initDLL
 
+std::vector<nlohmann::json> recipes = {};
+
 std::vector<std::string> toolNames{
 	"Backpack",
 	"Reinforced Backpack",
-	"Deadly Backpack"
+	"Deadly Backpack",
+	"Solenoid Backpack",
+	"Wormhole Backpack"
 };
 std::vector<std::string> materialNames{
+	"Cosmic Bars",
 	"Hyperfabric",
 	"Reinforced Hyperfabric",
-	"Deadly Hyperfabric"
+	"Deadly Hyperfabric",
+	"Solenoid Hyperfabric",
+	"Cosmic Hyperfabric"
 };
 
-// Item slot material
+// Dont deselect when open
+$hook(void, WorldSingleplayer, localPlayerEvent, Player* player, Packet::ClientPacket eventType, int64_t eventValue, void* data) {
+	if (eventType != Packet::C_HOTBAR_SLOT_SELECT) return original(self, player, eventType, eventValue, data);
+	if (!player->inventoryManager.isOpen()) return original(self, player, eventType, eventValue, data);
+	if (!dynamic_cast<ItemBackpack*>(player->hotbar.getSlot(player->hotbar.selectedIndex).get())) return original(self, player, eventType, eventValue, data);
+	if (player->inventoryManager.secondary != &((ItemBackpack*)player->hotbar.getSlot(player->hotbar.selectedIndex).get())->inventory) return original(self, player, eventType, eventValue, data);
+}
+
+$hook(void, WorldClient, localPlayerEvent, Player* player, Packet::ClientPacket eventType, int64_t eventValue, void* data) {
+	if (eventType != Packet::C_HOTBAR_SLOT_SELECT) return original(self, player, eventType, eventValue, data);
+	if (!player->inventoryManager.isOpen()) return original(self, player, eventType, eventValue, data);
+	if (!dynamic_cast<ItemBackpack*>(player->hotbar.getSlot(player->hotbar.selectedIndex).get())) return original(self, player, eventType, eventValue, data);
+	if (player->inventoryManager.secondary != &((ItemBackpack*)player->hotbar.getSlot(player->hotbar.selectedIndex).get())->inventory) return original(self, player, eventType, eventValue, data);
+}
+
+//Deadly text effect for materials
+$hook(bool, ItemMaterial, isDeadly)
+{
+	if (self->getName() == "Deadly Hyperfabric" || self->getName() == "Composite Hyperfabric") return true;
+
+	return original(self);
+}
+
+// Render materials icons
 $hook(void, ItemMaterial, render, const glm::ivec2& pos)
 {
-	int index = std::find(materialNames.begin(), materialNames.end(), self->name) - materialNames.begin();
+	auto index = std::find(materialNames.begin(), materialNames.end(), self->getName()) - materialNames.begin();
+
 	if (index == materialNames.size())
 		return original(self, pos);
 
-	TexRenderer& tr = ItemTool::tr; // or TexRenderer& tr = ItemTool::tr; after 0.3
+	TexRenderer& tr = ItemTool::tr;
+	FontRenderer& fr = ItemMaterial::fr;
+
 	const Tex2D* ogTex = tr.texture; // remember the original texture
 
-	tr.texture = ResourceManager::get("assets/Materials.png", true); // set to custom texture
-	tr.setClip(index * 36, 0, 36, 36);
+	static std::string iconPath = "";
+	iconPath = std::format("{}{}.png", "assets/", self->getName().c_str());
+	iconPath.erase(remove(iconPath.begin(), iconPath.end(), ' '), iconPath.end());
+
+	tr.texture = ResourceManager::get(iconPath, true); // set to custom texture
+	tr.setClip(0, 0, 36, 36);
 	tr.setPos(pos.x, pos.y, 70, 72);
 	tr.render();
-
 	tr.texture = ogTex; // return to the original texture
-	
 }
 
 // Backpack quick access
-bool handleBackpackAccess(Player& player, int mouseX,int mouseY) {
+bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 	static std::unique_ptr<Item>* itemFromBackpack = nullptr;
 	static int index = -1;
-	static enum BackpackAccessMode {
+	enum BackpackAccessMode {
 		Storing,
 		Accessing,
 		None
@@ -94,7 +129,7 @@ bool handleBackpackAccess(Player& player, int mouseX,int mouseY) {
 		manager.updateCraftingMenuBox();
 	}
 	else if (accessMode == Storing) { // Slot is not empty, put stuff from it into backpack 
-		backpack->inventory.addItem(*itemInSlot);
+		manager.applyTransfer(InventoryManager::ACTION_MOVE, *itemInSlot,manager.cursor.item,&backpack->getUsedInventory());
 		manager.craftingMenu.updateAvailableRecipes();
 		manager.updateCraftingMenuBox();
 	}
@@ -104,19 +139,55 @@ $hook(void, Player, mouseInput, GLFWwindow* window, World* world, double xpos, d
 	if (!handleBackpackAccess(*self, xpos, ypos)) return original(self, window, world, xpos, ypos);
 }
 $hook(bool, InventoryManager, mouseButtonInput, uint32_t x, uint32_t y, uint32_t button, int action, int mods) {
-	if (!handleBackpackAccess(StateGame::instanceObj.player, x, y)) return original(self, x,y,button,action,mods);
+	if (!handleBackpackAccess(StateGame::instanceObj.player, x, y)) return original(self, x, y, button, action, mods);
 	return true;
 }
 
-//Deadly text effect
-$hook(bool, ItemMaterial, isDeadly)
-{
-	if (self->name == "Deadly Hyperfabric")
+
+// Prevent player from doing bad stuff
+$hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction action, std::unique_ptr<Item>& selectedSlot, std::unique_ptr<Item>& cursorSlot, Inventory* other) {
+
+	InventoryManager& actualInventoryManager = StateGame::instanceObj.player.inventoryManager; // self is bullshit, when taking stuff its nullptr lol
+
+	// How the fuck does this even work
+	if (
+		(// Dont put backpacks into other backpacks
+			(
+				( // Mouse swapping
+					actualInventoryManager.secondary != nullptr &&
+					actualInventoryManager.secondary->name == "backpackInventory" &&
+
+					actualInventoryManager.secondary != other &&
+					cursorSlot &&
+					dynamic_cast<ItemBackpack*>(cursorSlot.get())) ||
+				( // Moving
+
+					action == InventoryManager::ACTION_MOVE &&
+					selectedSlot &&
+					other->name == "backpackInventory" &&
+					dynamic_cast<ItemBackpack*>(selectedSlot.get())
+					)
+				)
+			) ||
+		(// Dont take an item that is an open backpack
+			actualInventoryManager.secondary != nullptr &&
+			selectedSlot &&
+			dynamic_cast<ItemBackpack*>(selectedSlot.get()) &&
+			(&dynamic_cast<ItemBackpack*>(selectedSlot.get())->inventory == actualInventoryManager.secondary ||
+				(
+					dynamic_cast<ItemBackpack*>(selectedSlot.get())->type == ItemBackpack::WORMHOLE &&
+					actualInventoryManager.secondary->name == "wormholeInventory"
+					)
+				)
+			)
+		)
 		return true;
-	return original(self);
+
+
+	return original(self, action, selectedSlot, cursorSlot, other);
 }
 
-// A dd recipes
+//Init stuff
 $hookStatic(void, CraftingMenu, loadRecipes)
 {
 	static bool recipesLoaded = false;
@@ -127,108 +198,87 @@ $hookStatic(void, CraftingMenu, loadRecipes)
 
 	original();
 
-	CraftingMenu::recipes.push_back(
-		nlohmann::json{
-		{"recipe", {{{"name", "Hypersilk"}, {"count", 2}},{{"name", "Stick"}, {"count", 1}}}},
-		{"result", {{"name", "Hyperfabric"}, {"count", 1}}}
-		}
-	);
+	if (recipes.empty()) return;
 
-	CraftingMenu::recipes.push_back(
-		nlohmann::json{
-		{"recipe", {{{"name", "Hyperfabric"}, {"count", 2}},{{"name", "Iron Bars"}, {"count", 2}}}},
-		{"result", {{"name", "Reinforced Hyperfabric"}, {"count", 1}}}
-		}
-	);
-
-	CraftingMenu::recipes.push_back(
-		nlohmann::json{
-		{"recipe", {{{"name", "Reinforced Hyperfabric"}, {"count", 2}},{{"name", "Deadly Bars"}, {"count", 2}}}},
-		{"result", {{"name", "Deadly Hyperfabric"}, {"count", 1}}}
-		}
-	);
-
-	CraftingMenu::recipes.push_back(
-		nlohmann::json{
-		{"recipe", {{{"name", "Hyperfabric"}, {"count", 3}}}},
-		{"result", {{"name", "Backpack"}, {"count", 1}}}
-		}
-	);
-
-	CraftingMenu::recipes.push_back(
-		nlohmann::json{
-		{"recipe", {{{"name", "Reinforced Hyperfabric"}, {"count", 2}}}},
-		{"result", {{"name", "Reinforced Backpack"}, {"count", 1}}}
-		}
-	);
-
-	CraftingMenu::recipes.push_back(
-		nlohmann::json{
-		{"recipe", {{{"name", "Deadly Hyperfabric"}, {"count", 2}}}},
-		{"result", {{"name", "Deadly Backpack"}, {"count", 1}}}
-		}
-	);
+	for (const auto& recipe : recipes) {
+		if (std::any_of(CraftingMenu::recipes.begin(),
+			CraftingMenu::recipes.end(),
+			[&recipe](const nlohmann::json& globalRecipe) {
+				return globalRecipe == recipe;
+			})) continue;
+		CraftingMenu::recipes.push_back(recipe);
+	}
 }
+void addRecipe(const std::string& resultName, int resultCount,
+	const std::vector<std::pair<std::string, int>>& components) {
 
-// Prevent player from doing bad stuff
-$hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction action, std::unique_ptr<Item>& selectedSlot, std::unique_ptr<Item>& cursorSlot, Inventory* other){
+	nlohmann::json recipeJson;
+	recipeJson["result"] = { {"name", resultName}, {"count", resultCount} };
 
-	InventoryManager& actualInventoryManager = StateGame::instanceObj.player.inventoryManager; // self is bullshit, when taking stuff its nullptr lol
+	nlohmann::json recipeComponents = nlohmann::json::array();
+	for (const auto& [name, count] : components) {
+		recipeComponents.push_back({ {"name", name}, {"count", count} });
+	}
 
-	// How the fuck does this even work
-	if (
-		(// dont put backpacks into other backpacks
-			cursorSlot && 
-			actualInventoryManager.secondary != nullptr &&
-			actualInventoryManager.secondary->name == "backpackInventory" &&
-			actualInventoryManager.secondary != other &&
-			dynamic_cast<ItemBackpack*>(cursorSlot.get()) != nullptr
-			) ||
-		(// dont take an item that is an open backpack
-			actualInventoryManager.secondary != nullptr && 
-			selectedSlot &&
-			dynamic_cast<ItemBackpack*>(selectedSlot.get()) &&
-			&dynamic_cast<ItemBackpack*>(selectedSlot.get())->inventory == actualInventoryManager.secondary
-			)
-		)
-		return true;
-
-
-	return original(self, action, selectedSlot, cursorSlot, other);
+	recipeJson["recipe"] = recipeComponents;
+	recipes.push_back(recipeJson);
 }
+void InitRecipes() {
+	addRecipe("Cosmic Bars", 1, { {"Deadly Bars",2},{"Solenoid Bars",2} ,{"Midnight Wood",1} });
 
-// Initialize stuff
-void initItemNAME()
-{
+	addRecipe("Hyperfabric", 1, { {"Hypersilk",2},{"Stick",1} }); // 2 silk
+	addRecipe("Reinforced Hyperfabric", 1, { {"Hyperfabric",2},{"Iron Bars",2} }); // 4 silk, 2 iron
+	addRecipe("Deadly Hyperfabric", 1, { {"Reinforced Hyperfabric",2},{"Deadly Bars",2} }); // 8 silk, 4 iron, 2 deadly
+	addRecipe("Solenoid Hyperfabric", 1, { {"Deadly Hyperfabric",2},{"Solenoid Bars",2} }); // 16 silk, 8 iron, 4 deadly, 2 solenoid
+	addRecipe("Cosmic Hyperfabric", 1, { {"Solenoid Hyperfabric",1},{"Cosmic Bars",2} }); // 16 silk, 8 iron, 8 deadly, 6 solenoid
+
+	addRecipe("Backpack", 1, { {"Hyperfabric",3} }); // 6 silk
+	addRecipe("Reinforced Backpack", 1, { {"Reinforced Hyperfabric",2} }); // 8 silk, 4 iron
+	addRecipe("Deadly Backpack", 1, { {"Deadly Hyperfabric",2} }); // 16 silk, 8 iron, 4 deadly
+	addRecipe("Solenoid Backpack", 1, { {"Solenoid Hyperfabric",2} }); // 32 silk, 16 iron, 8 deadly, 4 solenoid
+	addRecipe("Wormhole Backpack", 1, { {"Cosmic Hyperfabric",2} }); // 32 silk, 16 iron, 16 deadly, 12 solenoid
+}
+void InitBlueprints() {
+	// Materials
 	for (int i = 0;i < materialNames.size(); i++)
-		Item::blueprints[materialNames[i]] =
-		{
-			{ "type", "material" },
-			{ "baseAttributes", nlohmann::json::object() } // no attributes
-		};
+		(Item::blueprints)[materialNames[i]] =
+	{
+		{ "type", "material"},
+		{ "baseAttributes", nlohmann::json::object()}
+	};
 
+	// Backpacks
 	for (int i = 0;i < toolNames.size(); i++)
 		Item::blueprints[toolNames[i]] =
-		{
-			{ "type", "backpack" },
-			{ "baseAttributes", { { "type", i }, { "inventory", nlohmann::json::array() } } }
-		};
+	{
+		{ "type", "backpack" },
+		{ "baseAttributes", { { "type", i }, { "inventory", nlohmann::json::array() } } }
+	};
 }
+void InitSounds() {
+	ItemBackpack::openSound = std::format("../../{}/assets/backpackOpen.ogg", fdm::getModPath(fdm::modID));
 
+	if (!AudioManager::loadSound(ItemBackpack::openSound)) Console::printLine("Cannot load sound: ", ItemBackpack::openSound);
+}
+void InitShaders() {
+
+}
 $hook(void, StateIntro, init, StateManager& s)
 {
 	original(self, s);
 
-	// initialize opengl stuff
+	//Initialize opengl stuff
 	glewExperimental = true;
 	glewInit();
 	glfwInit();
 
-	initItemNAME();
-
-	ItemBackpack::openSound = std::format("../../{}/assets/backpackOpen.ogg", fdm::getModPath(fdm::modID));
-
-	AudioManager::loadSound(ItemBackpack::openSound);
-
 	ItemBackpack::rendererInit();
+
+	InitBlueprints();
+
+	InitRecipes();
+
+	InitSounds();
+
+	InitShaders();
 }
