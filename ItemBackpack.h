@@ -27,13 +27,13 @@ public:
 	InventoryGrid inventory;
 	bool isSolenoidEffectActive = false;
 
-	InventoryGrid& getUsedInventory();
+	InventoryGrid& getInventory(Player* player);
 
 	static MeshRenderer renderer;
 	static std::string openSound;
 
-	std::unique_ptr<Item>* getFirstItem();
-	std::unique_ptr<Item>* getLastItem();
+	std::unique_ptr<Item>* getFirstItem(Player* player);
+	std::unique_ptr<Item>* getLastItem(Player* player);
 	std::unique_ptr<Item> clone() override;
 	static void rendererInit();
 	stl::string getName() override;

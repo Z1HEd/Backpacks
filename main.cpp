@@ -6,9 +6,6 @@ using namespace fdm;
 
 // Initialize the DLLMain
 initDLL
-
-std::vector<nlohmann::json> recipes = {};
-
 std::vector<std::string> toolNames{
 	"Backpack",
 	"Reinforced Backpack",
@@ -75,7 +72,7 @@ $hook(void, ItemMaterial, render, const glm::ivec2& pos)
 // Backpack quick access
 bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 	static std::unique_ptr<Item>* itemFromBackpack = nullptr;
-	static int index = -1;
+	
 	enum BackpackAccessMode {
 		Storing,
 		Accessing,
@@ -83,6 +80,8 @@ bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 	};
 	static BackpackAccessMode accessMode = None;
 	static ItemBackpack* backpack = nullptr;
+	static int index = -1;
+	static Inventory* inventory;
 	static std::unique_ptr<Item>* itemInSlot = nullptr;
 
 
@@ -100,18 +99,18 @@ bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 	}
 
 	// Find targeted slot
-	index = manager.primary->getSlotIndex({ mouseX,mouseY });
-	itemInSlot = nullptr;
+	inventory = manager.primary;
+	index = inventory->getSlotIndex({ mouseX,mouseY });
 
-	if (index != -1)
-		itemInSlot = &manager.primary->getSlot(index);
-	else {
-		index = manager.secondary->getSlotIndex({ mouseX,mouseY });
-		if (index != -1)
-			itemInSlot = &manager.secondary->getSlot(index);
+	if (index == -1) {
+		inventory = manager.secondary;
+		index = inventory->getSlotIndex({ mouseX,mouseY });
 	}
 
-	if (!itemInSlot) return true; // Didnt even target a slot
+
+	if (index ==-1) return true; // Didnt even target a slot
+
+	itemInSlot = &inventory->getSlot(index);
 
 	if (accessMode == None && itemInSlot->get() == nullptr) { // Slot is empty, get to accesing backpack
 		accessMode = Accessing;
@@ -121,15 +120,43 @@ bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 	}
 
 	if (itemInSlot->get() == nullptr && accessMode == Accessing) { // Slot is empty, put stuff from backpack into it
-		itemFromBackpack = backpack->getLastItem();
+		itemFromBackpack = backpack->getLastItem(&player);
 		if (itemFromBackpack == nullptr) return true;
-		// Lol i could do that directly
+		
+
+
+		if (manager.callback) {
+			const nlohmann::json action = {
+			{"action","transfer"},
+			{"cursorContents",(*itemFromBackpack)->save()},
+			{"inventory",inventory->name},
+			{"other",manager.secondary->name},
+			{"slotContents", ""},
+			{"slotIndex",index},
+			{"transferAction",InventoryManager::ACTION_SWAP}
+			};
+			manager.callback(action, manager.user);
+		}
+
 		manager.applyTransfer(InventoryManager::ACTION_SWAP, *itemFromBackpack, *itemInSlot, manager.secondary);
 		manager.craftingMenu.updateAvailableRecipes();
 		manager.updateCraftingMenuBox();
 	}
 	else if (accessMode == Storing) { // Slot is not empty, put stuff from it into backpack 
-		manager.applyTransfer(InventoryManager::ACTION_MOVE, *itemInSlot,manager.cursor.item,&backpack->getUsedInventory());
+
+		if (manager.callback) {
+			const nlohmann::json action = {
+			{"action","transfer"},
+			{"cursorContents",(*itemInSlot)->save()},
+			{"inventory","cursorBackpack"},
+			{"other",manager.primary->name},
+			{"slotContents", ""},
+			{"slotIndex",index},
+			{"transferAction",InventoryManager::ACTION_MOVE}
+			};
+			manager.callback(action, manager.user);
+		}
+		manager.applyTransfer(InventoryManager::ACTION_MOVE, *itemInSlot,manager.cursor.item,&backpack->getInventory(&player));
 		manager.craftingMenu.updateAvailableRecipes();
 		manager.updateCraftingMenuBox();
 	}
@@ -142,7 +169,6 @@ $hook(bool, InventoryManager, mouseButtonInput, uint32_t x, uint32_t y, uint32_t
 	if (!handleBackpackAccess(StateGame::instanceObj.player, x, y)) return original(self, x, y, button, action, mods);
 	return true;
 }
-
 
 // Prevent player from doing bad stuff
 $hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction action, std::unique_ptr<Item>& selectedSlot, std::unique_ptr<Item>& cursorSlot, Inventory* other) {
@@ -188,27 +214,7 @@ $hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction ac
 }
 
 //Init stuff
-$hookStatic(void, CraftingMenu, loadRecipes)
-{
-	static bool recipesLoaded = false;
 
-	if (recipesLoaded) return;
-
-	recipesLoaded = true;
-
-	original();
-
-	if (recipes.empty()) return;
-
-	for (const auto& recipe : recipes) {
-		if (std::any_of(CraftingMenu::recipes.begin(),
-			CraftingMenu::recipes.end(),
-			[&recipe](const nlohmann::json& globalRecipe) {
-				return globalRecipe == recipe;
-			})) continue;
-		CraftingMenu::recipes.push_back(recipe);
-	}
-}
 void addRecipe(const std::string& resultName, int resultCount,
 	const std::vector<std::pair<std::string, int>>& components) {
 
@@ -221,9 +227,10 @@ void addRecipe(const std::string& resultName, int resultCount,
 	}
 
 	recipeJson["recipe"] = recipeComponents;
-	recipes.push_back(recipeJson);
+	if (!CraftingMenu::recipes.contains(recipeJson))
+		CraftingMenu::recipes.push_back(recipeJson);
 }
-void InitRecipes() {
+void initRecipes() {
 	addRecipe("Cosmic Bars", 1, { {"Deadly Bars",2},{"Solenoid Bars",2} ,{"Midnight Wood",1} });
 
 	addRecipe("Hyperfabric", 1, { {"Hypersilk",2},{"Stick",1} }); // 2 silk
@@ -238,7 +245,7 @@ void InitRecipes() {
 	addRecipe("Solenoid Backpack", 1, { {"Solenoid Hyperfabric",2} }); // 32 silk, 16 iron, 8 deadly, 4 solenoid
 	addRecipe("Wormhole Backpack", 1, { {"Cosmic Hyperfabric",2} }); // 32 silk, 16 iron, 16 deadly, 12 solenoid
 }
-void InitBlueprints() {
+void initBlueprints() {
 	// Materials
 	for (int i = 0;i < materialNames.size(); i++)
 		(Item::blueprints)[materialNames[i]] =
@@ -252,15 +259,15 @@ void InitBlueprints() {
 		Item::blueprints[toolNames[i]] =
 	{
 		{ "type", "backpack" },
-		{ "baseAttributes", { { "type", i }, { "inventory", nlohmann::json::array() } } }
+		{ "baseAttributes", { { "type", i }, { "inventory", nlohmann::json::array() },{"isSolenoidEffectActive",false} } }
 	};
 }
-void InitSounds() {
+void initSounds() {
 	ItemBackpack::openSound = std::format("../../{}/assets/backpackOpen.ogg", fdm::getModPath(fdm::modID));
 
 	if (!AudioManager::loadSound(ItemBackpack::openSound)) Console::printLine("Cannot load sound: ", ItemBackpack::openSound);
 }
-void InitShaders() {
+void initShaders() {
 
 }
 $hook(void, StateIntro, init, StateManager& s)
@@ -274,11 +281,32 @@ $hook(void, StateIntro, init, StateManager& s)
 
 	ItemBackpack::rendererInit();
 
-	InitBlueprints();
+	initSounds();
 
-	InitRecipes();
+	initShaders();
+}
 
-	InitSounds();
+$hookStatic(void, CraftingMenu, loadRecipes)
+{
+	static bool recipesLoaded = false;
 
-	InitShaders();
+	if (recipesLoaded) return;
+
+	recipesLoaded = true;
+
+	original();
+
+	initRecipes();
+}
+$hookStatic(bool, Item, loadItemInfo)
+{
+	static bool loaded = false;
+	if (loaded) return false;
+	loaded = true;
+
+	bool result = original();
+
+	initBlueprints();
+
+	return result;
 }

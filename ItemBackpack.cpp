@@ -3,31 +3,31 @@
 MeshRenderer ItemBackpack::renderer{};
 std::string ItemBackpack::openSound="";
 
-InventoryGrid playerWormholeInventory = {};
+std::unordered_map<Player*,InventoryGrid> wormholeInventories = {};
 
 // Wormhole inventory
 
-InventoryGrid& ItemBackpack::getUsedInventory() {
-	return type == WORMHOLE ? playerWormholeInventory : inventory;
+InventoryGrid& ItemBackpack::getInventory(Player* player) {
+	return type == WORMHOLE ? wormholeInventories[player] : inventory;
 }
 
 $hook(nlohmann::json&, Player, save, nlohmann::json* _) {
 	nlohmann::json& ret = original(self, _);
-	
-	ret["wormholeInventory"] = playerWormholeInventory.save();
+
+	ret["wormholeInventory"] = wormholeInventories[self].save();
 
 	return ret;
 }
 
-$hook(void, Player, load, nlohmann::json& j) {
+$hook(void, Player, load,nlohmann::json& j) {
 	original(self, j);
 
-	playerWormholeInventory = InventoryGrid(ItemBackpack::sizes[ItemBackpack::WORMHOLE]);
-	if (j.contains("wormholeInventory")) {
-		playerWormholeInventory.load(j["wormholeInventory"]);
-		playerWormholeInventory.name = "wormholeInventory";
-		playerWormholeInventory.label = std::format("Wormhole Backpack");
-	}
+	wormholeInventories[self]= InventoryGrid(ItemBackpack::sizes[ItemBackpack::WORMHOLE]);
+	if (j.contains("wormholeInventory")) 
+		wormholeInventories[self].load(j["wormholeInventory"]);
+
+	wormholeInventories[self].name = "wormholeInventory";
+	wormholeInventories[self].label = std::format("Wormhole Backpack");
 }
 
 // Solenoid backpack effect
@@ -57,14 +57,6 @@ void applySolenoidEffect(World* world, Player* player) {
 				}
 			}
 
-}
-
-$hook(void, Player, update,World* world, double dt) {
-	original(self, world, dt);
-	ItemBackpack* backpack = dynamic_cast<ItemBackpack*>(self->hotbar.getSlot(self->hotbar.selectedIndex).get());
-	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(self->equipment.getSlot(0).get());
-	if (!backpack) return;
-	if (backpack->type == ItemBackpack::SOLENOID && backpack->isSolenoidEffectActive) applySolenoidEffect(world, self);
 }
 
 // Automatically store items in solenoid backpack
@@ -97,8 +89,8 @@ stl::string ItemBackpack::getName() {
 	return "Backpack";
 }
 
-std::unique_ptr<Item>* ItemBackpack::getFirstItem() {
-	InventoryGrid& usedInventory = getUsedInventory();
+std::unique_ptr<Item>* ItemBackpack::getFirstItem(Player* player) {
+	InventoryGrid& usedInventory = getInventory(player);
 	for (uint32_t i = 0;i < usedInventory.getSlotCount();i++) {
 		auto* slot = &usedInventory.getSlot(i);
 		if (slot && slot->get()) return slot;
@@ -106,8 +98,8 @@ std::unique_ptr<Item>* ItemBackpack::getFirstItem() {
 	return nullptr;
 }
 
-std::unique_ptr<Item>* ItemBackpack::getLastItem() {
-	InventoryGrid& usedInventory = getUsedInventory();
+std::unique_ptr<Item>* ItemBackpack::getLastItem(Player* player) {
+	InventoryGrid& usedInventory = getInventory(player);
 	for (int i = usedInventory.getSlotCount() - 1;i>=0;i--) {
 		auto* slot = &usedInventory.getSlot(i);
 		if (slot && slot->get()) return slot;
@@ -121,6 +113,8 @@ $hook(void,Player, mouseButtonInput, GLFWwindow* window, World* world, int butto
 	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(self->equipment.getSlot(0).get());
 	if (!backpack) return original(self, window, world, button, action, mods);
 
+	if (backpack->type == ItemBackpack::SOLENOID && backpack->isSolenoidEffectActive) applySolenoidEffect(world, self);
+
 	if (self->inventoryManager.isOpen()) return original(self, window, world, button, action, mods);
 	if (action != GLFW_PRESS || button!=GLFW_MOUSE_BUTTON_2) return original(self, window, world, button, action, mods);
 
@@ -131,13 +125,13 @@ $hook(void,Player, mouseButtonInput, GLFWwindow* window, World* world, int butto
 
 	self->inventoryManager.primary = &self->playerInventory;
 	self->shouldResetMouse = true;
-	self->inventoryManager.secondary = backpack->type == ItemBackpack::WORMHOLE ? &playerWormholeInventory : &backpack->inventory;
+	self->inventoryManager.secondary = backpack->type == ItemBackpack::WORMHOLE ? &wormholeInventories[self] : &backpack->inventory;
 
 
 	self->inventoryManager.craftingMenu.updateAvailableRecipes();
 	self->inventoryManager.updateCraftingMenuBox();
 
-	backpack->openInstance.inventory = &backpack->inventory;
+	backpack->openInstance.inventory = self->inventoryManager.secondary;
 	backpack->openInstance.manager = &self->inventoryManager;
 
 	((InventoryGrid*)self->inventoryManager.secondary)->renderPos = glm::ivec2{ 397,50 };
@@ -351,4 +345,12 @@ $hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& ite
 	result->inventory.label = std::format("{}:", result->getName());
 	result->count = count;
 	return result;
+}
+
+$hook(Inventory*, InventoryManager, findInventory, World* world, Player* player, const stl::string& inventoryName) {
+	if (inventoryName == "backpackInventory" || inventoryName == "wormholeInventory")
+		return &((ItemBackpack*)player->hotbar.getSlot(player->hotbar.selectedIndex).get())->getInventory(player);
+	if (inventoryName == "cursorBackpack")
+		return &((ItemBackpack*)player->inventoryManager.cursor.item.get())->getInventory(player);
+	else return original(self, world, player, inventoryName);
 }
