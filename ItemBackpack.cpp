@@ -1,4 +1,5 @@
 #include "ItemBackpack.h"
+#include "utils.h"
 
 MeshRenderer ItemBackpack::renderer{};
 std::string ItemBackpack::openSound="";
@@ -87,24 +88,6 @@ stl::string ItemBackpack::getName() {
 	}
 
 	return "Backpack";
-}
-
-std::unique_ptr<Item>* ItemBackpack::getFirstItem(Player* player) {
-	InventoryGrid& usedInventory = getInventory(player);
-	for (uint32_t i = 0;i < usedInventory.getSlotCount();i++) {
-		auto* slot = &usedInventory.getSlot(i);
-		if (slot && slot->get()) return slot;
-	}
-	return nullptr;
-}
-
-std::unique_ptr<Item>* ItemBackpack::getLastItem(Player* player) {
-	InventoryGrid& usedInventory = getInventory(player);
-	for (int i = usedInventory.getSlotCount() - 1;i>=0;i--) {
-		auto* slot = &usedInventory.getSlot(i);
-		if (slot && slot->get()) return slot;
-	}
-	return nullptr;
 }
 
 $hook(void,Player, mouseButtonInput, GLFWwindow* window, World* world, int button, int action, int mods) {
@@ -350,7 +333,12 @@ $hookStatic(std::unique_ptr<Item>, Item, instantiateItem, const stl::string& ite
 $hook(Inventory*, InventoryManager, findInventory, World* world, Player* player, const stl::string& inventoryName) {
 	if (inventoryName == "backpackInventory" || inventoryName == "wormholeInventory")
 		return &((ItemBackpack*)player->hotbar.getSlot(player->hotbar.selectedIndex).get())->getInventory(player);
-	if (inventoryName == "cursorBackpack")
-		return &((ItemBackpack*)player->inventoryManager.cursor.item.get())->getInventory(player);
-	else return original(self, world, player, inventoryName);
+	
+	auto split = utils::split(inventoryName, ".");
+	if (split.size() == 3 && split[0] == "Backpack") {
+		if (auto item = original(self, world, player, split[1])->getSlot(std::atoi(split[2].c_str())).get())
+			if (auto backpack = dynamic_cast<ItemBackpack*>(item))
+				return &backpack->getInventory(player);
+	}
+	return original(self, world, player, inventoryName);
 }

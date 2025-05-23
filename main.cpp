@@ -2,16 +2,21 @@
 
 #include <4dm.h>
 #include "ItemBackpack.h"
+#include "utils.h"
 using namespace fdm;
 
 // Initialize the DLLMain
 initDLL
-std::vector<std::string> toolNames{
+std::vector<std::string> backpackNames{
 	"Backpack",
 	"Reinforced Backpack",
 	"Deadly Backpack",
 	"Solenoid Backpack",
 	"Wormhole Backpack"
+};
+std::vector<std::string> toolNames{
+	"Spindle And Distaff",
+	"Weaving Loom"
 };
 std::vector<std::string> materialNames{
 	"Cosmic Bars",
@@ -21,6 +26,62 @@ std::vector<std::string> materialNames{
 	"Solenoid Hyperfabric",
 	"Cosmic Hyperfabric"
 };
+// Weaving and Spinning
+bool isWeaving = false;
+bool isSpinning = false;
+
+$hook(void, Player, updateLocal, World* world, double dt, GLFWwindow* window) {
+	if (self->inventoryManager.isOpen()) return original(self, world, dt, window);
+	
+	isWeaving = false;
+	isSpinning = false;
+	self->inventoryManager.craftingText.setText("Crafting:");
+	if (self->keys.rightMouseDown && self->hotbar.getSlot(self->hotbar.selectedIndex) && self->hotbar.getSlot(self->hotbar.selectedIndex)->getName() == "Weaving Loom")
+	{
+		isWeaving = true;
+		self->inventoryManager.craftingText.setText("Weaving:");
+		utils::openInventory(StateGame::instanceObj.world.get(), self);
+		return;
+	}
+	if (self->keys.rightMouseDown && self->hotbar.getSlot(self->hotbar.selectedIndex) && self->hotbar.getSlot(self->hotbar.selectedIndex)->getName() == "Spindle And Distaff")
+	{
+		isSpinning = true;
+		self->inventoryManager.craftingText.setText("Spinning:");
+		utils::openInventory(StateGame::instanceObj.world.get(), self);
+		return;
+	}
+
+	return original(self, world, dt, window);
+}
+
+
+$hook(void, CraftingMenu, updateAvailableRecipes)
+{
+	original(self);
+
+	for (auto it = self->craftableRecipes.begin(); it < self->craftableRecipes.end(); )
+	{
+
+		if (isSpinning && it->result->getName().find("Hyperfabric")==std::string::npos) {
+			it = self->craftableRecipes.erase(it);
+			continue;
+		}
+		if (!isSpinning && it->result->getName().find("Hyperfabric") != std::string::npos) {
+			it = self->craftableRecipes.erase(it);
+			continue;
+		}
+		if (isWeaving && it->result->getName().find("Backpack") == std::string::npos) {
+			it = self->craftableRecipes.erase(it);
+			continue;
+		}
+		if (!isWeaving && it->result->getName().find("Backpack") != std::string::npos) {
+			it = self->craftableRecipes.erase(it);
+			continue;
+		}
+		it++;
+	}
+	self->Interface->updateCraftingMenuBox();
+}
 
 // Dont deselect when open
 $hook(void, WorldSingleplayer, localPlayerEvent, Player* player, Packet::ClientPacket eventType, int64_t eventValue, void* data) {
@@ -48,9 +109,29 @@ $hook(bool, ItemMaterial, isDeadly)
 // Render materials icons
 $hook(void, ItemMaterial, render, const glm::ivec2& pos)
 {
-	auto index = std::find(materialNames.begin(), materialNames.end(), self->getName()) - materialNames.begin();
+	if (!utils::contains(materialNames,(std::string)self->getName()))
+		return original(self, pos);
 
-	if (index == materialNames.size())
+	TexRenderer& tr = ItemTool::tr;
+	FontRenderer& fr = ItemMaterial::fr;
+
+	const Tex2D* ogTex = tr.texture; // remember the original texture
+
+	static std::string iconPath = "";
+	iconPath = std::format("{}{}.png", "assets/", self->getName().c_str());
+	iconPath.erase(remove(iconPath.begin(), iconPath.end(), ' '), iconPath.end());
+
+	tr.texture = ResourceManager::get(iconPath, true); // set to custom texture
+	tr.setClip(0, 0, 36, 36);
+	tr.setPos(pos.x, pos.y, 70, 72);
+	tr.render();
+	tr.texture = ogTex; // return to the original texture
+}
+
+// Render tools icons
+$hook(void, ItemTool, render, const glm::ivec2& pos)
+{
+	if (!utils::contains(toolNames, (std::string)self->getName()))
 		return original(self, pos);
 
 	TexRenderer& tr = ItemTool::tr;
@@ -120,43 +201,19 @@ bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 	}
 
 	if (itemInSlot->get() == nullptr && accessMode == Accessing) { // Slot is empty, put stuff from backpack into it
-		itemFromBackpack = backpack->getLastItem(&player);
-		if (itemFromBackpack == nullptr) return true;
-		
+		//utils::swapIndex(&manager, inventory, &backpack->getInventory(&player), index, utils::getLastItemIndex(&backpack->getInventory(&player)), manager.secondary);
+		int backpackIndex = utils::getLastItemIndex(&backpack->getInventory(&player));
+		if (backpackIndex == -1) return true;
+		utils::cursorTransfer(&manager, inventory, index, manager.secondary);
+		utils::cursorTransfer(&manager, &backpack->getInventory(&player), backpackIndex, manager.secondary,std::format("Backpack.{}.{}",inventory->name, index));
+		utils::cursorTransfer(&manager, inventory, index, manager.secondary);
 
-
-		if (manager.callback) {
-			const nlohmann::json action = {
-			{"action","transfer"},
-			{"cursorContents",(*itemFromBackpack)->save()},
-			{"inventory",inventory->name},
-			{"other",manager.secondary->name},
-			{"slotContents", ""},
-			{"slotIndex",index},
-			{"transferAction",InventoryManager::ACTION_SWAP}
-			};
-			manager.callback(action, manager.user);
-		}
-
-		manager.applyTransfer(InventoryManager::ACTION_SWAP, *itemFromBackpack, *itemInSlot, manager.secondary);
 		manager.craftingMenu.updateAvailableRecipes();
 		manager.updateCraftingMenuBox();
 	}
-	else if (accessMode == Storing) { // Slot is not empty, put stuff from it into backpack 
+	else if (accessMode == Storing && itemInSlot->get() !=nullptr) { // Slot is not empty, put stuff from it into backpack 
+		utils::placeInto(&manager, inventory , index, &backpack->getInventory(&player), manager.primary,std::format("Backpack.{}.{}",inventory->name,index));
 
-		if (manager.callback) {
-			const nlohmann::json action = {
-			{"action","transfer"},
-			{"cursorContents",(*itemInSlot)->save()},
-			{"inventory","cursorBackpack"},
-			{"other",manager.primary->name},
-			{"slotContents", ""},
-			{"slotIndex",index},
-			{"transferAction",InventoryManager::ACTION_MOVE}
-			};
-			manager.callback(action, manager.user);
-		}
-		manager.applyTransfer(InventoryManager::ACTION_MOVE, *itemInSlot,manager.cursor.item,&backpack->getInventory(&player));
 		manager.craftingMenu.updateAvailableRecipes();
 		manager.updateCraftingMenuBox();
 	}
@@ -231,6 +288,8 @@ void addRecipe(const std::string& resultName, int resultCount,
 		CraftingMenu::recipes.push_back(recipeJson);
 }
 void initRecipes() {
+	addRecipe("Weaving Loom", 1, { {"Stick",3},{"Wood",2},{"Iron Bars",1} });
+	addRecipe("Spindle And Distaff", 1, { {"Stick",2},{"Hypersilk",2},{"Rock",1} });
 	addRecipe("Cosmic Bars", 1, { {"Deadly Bars",2},{"Solenoid Bars",2} ,{"Midnight Wood",1} });
 
 	addRecipe("Hyperfabric", 1, { {"Hypersilk",2},{"Stick",1} }); // 2 silk
@@ -247,20 +306,29 @@ void initRecipes() {
 }
 void initBlueprints() {
 	// Materials
-	for (int i = 0;i < materialNames.size(); i++)
-		(Item::blueprints)[materialNames[i]] =
+	for (auto material : materialNames)
+		(Item::blueprints)[material] =
 	{
 		{ "type", "material"},
 		{ "baseAttributes", nlohmann::json::object()}
 	};
 
 	// Backpacks
-	for (int i = 0;i < toolNames.size(); i++)
-		Item::blueprints[toolNames[i]] =
+	for (int i=0;i<backpackNames.size();i++)
+		Item::blueprints[backpackNames[i]] =
 	{
 		{ "type", "backpack" },
 		{ "baseAttributes", { { "type", i }, { "inventory", nlohmann::json::array() },{"isSolenoidEffectActive",false} } }
 	};
+
+	// Tools
+	for (auto tool : toolNames)
+		Item::blueprints[tool] =
+	{
+		{ "type", "tool" },
+		{ "baseAttributes", nlohmann::json::object()}
+	};
+
 }
 void initSounds() {
 	ItemBackpack::openSound = std::format("../../{}/assets/backpackOpen.ogg", fdm::getModPath(fdm::modID));
