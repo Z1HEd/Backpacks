@@ -201,7 +201,6 @@ bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 	}
 
 	if (itemInSlot->get() == nullptr && accessMode == Accessing) { // Slot is empty, put stuff from backpack into it
-		//utils::swapIndex(&manager, inventory, &backpack->getInventory(&player), index, utils::getLastItemIndex(&backpack->getInventory(&player)), manager.secondary);
 		int backpackIndex = utils::getLastItemIndex(&backpack->getInventory(&player));
 		if (backpackIndex == -1) return true;
 		utils::cursorTransfer(&manager, inventory, index, manager.secondary);

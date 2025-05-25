@@ -32,18 +32,20 @@ $hook(void, Player, load,nlohmann::json& j) {
 }
 
 // Solenoid backpack effect
+static bool rightMousePressed = false;
 void applySolenoidEffect(World* world, Player* player) {
 	int xPlayer, zPlayer, wPlayer;
-	xPlayer = std::roundf( player->pos.x / 8);
-	zPlayer = std::roundf(player->pos.z / 8);
-	wPlayer = std::roundf(player->pos.w / 8);
+	xPlayer = std::floorf( player->pos.x / 8);
+	zPlayer = std::floorf(player->pos.z / 8);
+	wPlayer = std::floorf(player->pos.w / 8);
 
 	for (int x = 0;x < 2;x++)
 		for (int z = 0;z < 2;z++)
 			for (int w = 0;w < 2;w++)
 			{
-				
+				world->chunksMutex.lock();
 				Chunk* chunk = world->getChunk(glm::i64vec3{ x+xPlayer-1,z + zPlayer-1,w + wPlayer-1 });
+				world->chunksMutex.unlock();
 				if (!chunk) 
 					continue;
 				for (auto entity : chunk->entities) {
@@ -53,11 +55,27 @@ void applySolenoidEffect(World* world, Player* player) {
 					if (distance < 8) {
 						((EntityItem*)entity)->hitbox.deltaVel += towardsPlayer / (distance)*0.15f;
 						((EntityItem*)entity)->combineWithNearby(world);
+						//((EntityItem*)entity)->lastServerUpdateTime = glfwGetTime();
 					}
 					
 				}
 			}
+}
+$hook(void, Player, update, World* world, double dt) {
+	original(self, world, dt);
+	bool rightMouseJustPressed = !rightMousePressed && self->keys.rightMouseDown;
+	rightMousePressed = self->keys.rightMouseDown;
 
+	ItemBackpack* backpack = dynamic_cast<ItemBackpack*>(self->hotbar.getSlot(self->hotbar.selectedIndex).get());
+	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(self->equipment.getSlot(0).get());
+	if (!backpack || backpack->type != ItemBackpack::SOLENOID) return;
+	if (self->keys.shift && rightMouseJustPressed) {
+		backpack->isSolenoidEffectActive = !backpack->isSolenoidEffectActive;
+		return;
+	}
+
+	if (backpack->isSolenoidEffectActive)
+		applySolenoidEffect(world, self);
 }
 
 // Automatically store items in solenoid backpack
@@ -65,6 +83,16 @@ void applySolenoidEffect(World* world, Player* player) {
 $hook(void, WorldSingleplayer, localPlayerEvent, Player* player, Packet::ClientPacket eventType, int64_t eventValue, void* data) {
 	if (eventType != Packet::C_ITEM_COLLECT) return original(self, player, eventType, eventValue, data);
 	
+	ItemBackpack* backpack = dynamic_cast<ItemBackpack*>(player->hotbar.getSlot(player->hotbar.selectedIndex).get());
+	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(player->equipment.getSlot(0).get());
+	if (!backpack) return original(self, player, eventType, eventValue, data);
+	if (backpack->type != ItemBackpack::SOLENOID || !backpack->isSolenoidEffectActive) return original(self, player, eventType, eventValue, data);
+	if (dynamic_cast<ItemBackpack*>(((EntityItem*)data)->item.get()))  return original(self, player, eventType, eventValue, data);
+	((EntityItem*)data)->give(&backpack->inventory, eventType);
+}
+$hook(void, WorldClient, localPlayerEvent, Player* player, Packet::ClientPacket eventType, int64_t eventValue, void* data) {
+	if (eventType != Packet::C_ITEM_COLLECT) return original(self, player, eventType, eventValue, data);
+
 	ItemBackpack* backpack = dynamic_cast<ItemBackpack*>(player->hotbar.getSlot(player->hotbar.selectedIndex).get());
 	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(player->equipment.getSlot(0).get());
 	if (!backpack) return original(self, player, eventType, eventValue, data);
@@ -96,20 +124,12 @@ $hook(void,Player, mouseButtonInput, GLFWwindow* window, World* world, int butto
 	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(self->equipment.getSlot(0).get());
 	if (!backpack) return original(self, window, world, button, action, mods);
 
-	if (backpack->type == ItemBackpack::SOLENOID && backpack->isSolenoidEffectActive) applySolenoidEffect(world, self);
-
 	if (self->inventoryManager.isOpen()) return original(self, window, world, button, action, mods);
-	if (action != GLFW_PRESS || button!=GLFW_MOUSE_BUTTON_2) return original(self, window, world, button, action, mods);
-
-	if (self->keys.shift) {
-		backpack->isSolenoidEffectActive = !backpack->isSolenoidEffectActive;
-		return;
-	}
+	if (action != GLFW_PRESS || button!=GLFW_MOUSE_BUTTON_2 || self->keys.shift) return original(self, window, world, button, action, mods);
 
 	self->inventoryManager.primary = &self->playerInventory;
 	self->shouldResetMouse = true;
 	self->inventoryManager.secondary = backpack->type == ItemBackpack::WORMHOLE ? &wormholeInventories[self] : &backpack->inventory;
-
 
 	self->inventoryManager.craftingMenu.updateAvailableRecipes();
 	self->inventoryManager.updateCraftingMenuBox();
