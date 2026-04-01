@@ -34,30 +34,39 @@ $hook(void, Player, load,nlohmann::json& j) {
 // Solenoid backpack effect
 static bool rightMousePressed = false;
 void applySolenoidEffect(World* world, Player* player) {
-	int xPlayer, zPlayer, wPlayer;
-	xPlayer = std::floorf( player->pos.x / 8);
-	zPlayer = std::floorf(player->pos.z / 8);
-	wPlayer = std::floorf(player->pos.w / 8);
+	int xPlayer = std::floor(player->pos.x / 8.0f);
+	int zPlayer = std::floor(player->pos.z / 8.0f);
+	int wPlayer = std::floor(player->pos.w / 8.0f);
 
-	for (int x = 0;x < 2;x++)
-		for (int z = 0;z < 2;z++)
-			for (int w = 0;w < 2;w++)
-			{
-				world->chunksMutex.lock();
-				Chunk* chunk = world->getChunk(glm::i64vec3{ x+xPlayer-1,z + zPlayer-1,w + wPlayer-1 });
-				world->chunksMutex.unlock();
-				if (!chunk) 
+	std::lock_guard lockChunks{ world->chunksMutex };
+	std::lock_guard lockEntities{ world->entitiesMutex };
+
+	for (int x = -1; x <= 1; ++x)
+		for (int z = -1; z <= 1; ++z)
+			for (int w = -1; w <= 1; ++w) {
+				
+				Chunk* chunk = world->getChunk(glm::i64vec3{
+					xPlayer + x,
+					zPlayer + z,
+					wPlayer + w
+					});
+
+				if (!chunk)
 					continue;
+				
 				for (auto entity : chunk->entities) {
-					if (entity->getName() != "Item") continue;
+					if (entity->getName() != "Item")
+						continue;
+
 					glm::vec4 towardsPlayer = player->pos - entity->getPos();
 					float distance = glm::length(towardsPlayer);
-					if (distance < 8) {
-						((EntityItem*)entity)->hitbox.deltaVel += towardsPlayer / (distance)*0.15f;
-						((EntityItem*)entity)->combineWithNearby(world);
-						//((EntityItem*)entity)->lastServerUpdateTime = glfwGetTime();
+
+					if (distance < 8.0f && distance > 0.0001f) {
+						auto* item = static_cast<EntityItem*>(entity);
+						item->hitbox.deltaVel += (towardsPlayer / distance) * 0.35f;
+						item->combineWithNearby(world);
+						item->lastServerUpdateTime = glfwGetTime();
 					}
-					
 				}
 			}
 }
@@ -90,15 +99,21 @@ $hook(void, WorldSingleplayer, localPlayerEvent, Player* player, Packet::ClientP
 	if (dynamic_cast<ItemBackpack*>(((EntityItem*)data)->item.get()))  return original(self, player, eventType, eventValue, data);
 	((EntityItem*)data)->give(&backpack->inventory, eventType);
 }
-$hook(void, WorldClient, localPlayerEvent, Player* player, Packet::ClientPacket eventType, int64_t eventValue, void* data) {
-	if (eventType != Packet::C_ITEM_COLLECT) return original(self, player, eventType, eventValue, data);
+
+$hook(bool, WorldServer,  giveItem, WorldServer::PlayerInfo* playerInfo, std::unique_ptr<Item>& item){
+	Player* player = playerInfo->player.get();
 
 	ItemBackpack* backpack = dynamic_cast<ItemBackpack*>(player->hotbar.getSlot(player->hotbar.selectedIndex).get());
 	if (!backpack) backpack = dynamic_cast<ItemBackpack*>(player->equipment.getSlot(0).get());
-	if (!backpack) return original(self, player, eventType, eventValue, data);
-	if (backpack->type != ItemBackpack::SOLENOID || !backpack->isSolenoidEffectActive) return original(self, player, eventType, eventValue, data);
-	if (dynamic_cast<ItemBackpack*>(((EntityItem*)data)->item.get()))  return original(self, player, eventType, eventValue, data);
-	((EntityItem*)data)->give(&backpack->inventory, eventType);
+	if (!backpack) return original(self, playerInfo, item);
+	if (backpack->type != ItemBackpack::SOLENOID || !backpack->isSolenoidEffectActive) return original(self, playerInfo, item);
+	if (dynamic_cast<ItemBackpack*>(item.get()))  return original(self, playerInfo, item);
+
+	if (backpack->getInventory(player).addItem(item)){
+		nlohmann::json invJson = player->saveInventory();
+		self->sendMessagePlayer({ Packet::S_INVENTORY_UPDATE, invJson.dump() }, playerInfo, true);
+	}
+
 }
 
 stl::string ItemBackpack::getName() {
@@ -147,7 +162,7 @@ void ItemBackpack::render(const glm::ivec2& pos) {
 	const Tex2D* ogTex = tr.texture; // remember the original texture
 
 	static std::string iconPath = "";
-	iconPath = std::format("{}{}.png", "assets/", this->getName().c_str());
+	iconPath = std::format("{}{}.png", "assets/Items/", this->getName().c_str());
 	iconPath.erase(remove(iconPath.begin(), iconPath.end(), ' '), iconPath.end());
 
 	tr.texture = ResourceManager::get(iconPath, true); // set to custom texture

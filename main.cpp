@@ -14,17 +14,15 @@ std::vector<std::string> backpackNames{
 	"Solenoid Backpack",
 	"Wormhole Backpack"
 };
-std::vector<std::string> toolNames{
-	"Spindle And Distaff",
-	"Weaving Loom"
-};
 std::vector<std::string> materialNames{
 	"Cosmic Bars",
 	"Hyperfabric",
 	"Reinforced Hyperfabric",
 	"Deadly Hyperfabric",
 	"Solenoid Hyperfabric",
-	"Cosmic Hyperfabric"
+	"Cosmic Hyperfabric",
+	"Spindle And Distaff",
+	"Weaving Loom"
 };
 // Weaving and Spinning
 bool isWeaving = false;
@@ -118,32 +116,11 @@ $hook(void, ItemMaterial, render, const glm::ivec2& pos)
 	const Tex2D* ogTex = tr.texture; // remember the original texture
 
 	static std::string iconPath = "";
-	iconPath = std::format("{}{}.png", "assets/", self->getName().c_str());
+	iconPath = std::format("{}{}.png", "assets/Items/", self->getName().c_str());
 	iconPath.erase(remove(iconPath.begin(), iconPath.end(), ' '), iconPath.end());
 
 	tr.texture = ResourceManager::get(iconPath, true); // set to custom texture
-	tr.setClip(0, 0, 36, 36);
-	tr.setPos(pos.x, pos.y, 70, 72);
-	tr.render();
-	tr.texture = ogTex; // return to the original texture
-}
-
-// Render tools icons
-$hook(void, ItemTool, render, const glm::ivec2& pos)
-{
-	if (!utils::contains(toolNames, (std::string)self->getName()))
-		return original(self, pos);
-
-	TexRenderer& tr = ItemTool::tr;
-	FontRenderer& fr = ItemMaterial::fr;
-
-	const Tex2D* ogTex = tr.texture; // remember the original texture
-
-	static std::string iconPath = "";
-	iconPath = std::format("{}{}.png", "assets/", self->getName().c_str());
-	iconPath.erase(remove(iconPath.begin(), iconPath.end(), ' '), iconPath.end());
-
-	tr.texture = ResourceManager::get(iconPath, true); // set to custom texture
+	if (!tr.texture) throw std::runtime_error("Could not load icon for the item: " + std::string(self->getName().c_str()));
 	tr.setClip(0, 0, 36, 36);
 	tr.setPos(pos.x, pos.y, 70, 72);
 	tr.render();
@@ -151,6 +128,20 @@ $hook(void, ItemTool, render, const glm::ivec2& pos)
 }
 
 // Backpack quick access
+bool isPlayerDoingBadStuff(Player& player, Inventory* inventory, InventoryManager* inventoryManager, std::unique_ptr<Item>& cursorSlot,
+	std::unique_ptr<Item>& selectedSlot) {
+	
+	bool isMouseSwapping = player.keys.leftMouseDown && inventory->name == "backpackInventory" && cursorSlot &&
+		dynamic_cast<ItemBackpack*>(cursorSlot.get());
+
+	bool isShiftMoving = player.keys.shift && inventoryManager->secondary->name == "backpackInventory" && selectedSlot &&
+		dynamic_cast<ItemBackpack*>(selectedSlot.get());
+
+	bool isTakingOpenBackpack = player.keys.leftMouseDown && selectedSlot && dynamic_cast<ItemBackpack*>(selectedSlot.get()) &&
+		&dynamic_cast<ItemBackpack*>(selectedSlot.get())->getInventory(&player) == inventoryManager->secondary;
+
+	return isMouseSwapping || isShiftMoving || isTakingOpenBackpack;
+}
 bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 	static std::unique_ptr<Item>* itemFromBackpack = nullptr;
 	
@@ -170,6 +161,20 @@ bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 
 	if (!manager.isOpen()) return false; // Inventory is closed
 
+	// Find targeted slot
+	inventory = manager.primary;
+	index = inventory->getSlotIndex({ mouseX,mouseY });
+	if (index == -1) {
+		inventory = manager.secondary;
+		index = inventory->getSlotIndex({ mouseX,mouseY });
+	}
+	if (index == -1) return false; // Didnt even target a slot
+	itemInSlot = &inventory->getSlot(index);
+
+	// Dont let player do bad stuff
+	if (isPlayerDoingBadStuff(player, inventory,&manager,manager.cursor.item,*itemInSlot))
+		return true;
+
 	backpack = dynamic_cast<ItemBackpack*>(manager.cursor.item.get());
 
 	if (backpack == nullptr) return false; // Not holding a backpack
@@ -178,20 +183,6 @@ bool handleBackpackAccess(Player& player, int mouseX, int mouseY) {
 		accessMode = None;
 		return false;
 	}
-
-	// Find targeted slot
-	inventory = manager.primary;
-	index = inventory->getSlotIndex({ mouseX,mouseY });
-
-	if (index == -1) {
-		inventory = manager.secondary;
-		index = inventory->getSlotIndex({ mouseX,mouseY });
-	}
-
-
-	if (index ==-1) return true; // Didnt even target a slot
-
-	itemInSlot = &inventory->getSlot(index);
 
 	if (accessMode == None && itemInSlot->get() == nullptr) { // Slot is empty, get to accesing backpack
 		accessMode = Accessing;
@@ -222,53 +213,12 @@ $hook(void, Player, mouseInput, GLFWwindow* window, World* world, double xpos, d
 	if (!handleBackpackAccess(*self, xpos, ypos)) return original(self, window, world, xpos, ypos);
 }
 $hook(bool, InventoryManager, mouseButtonInput, uint32_t x, uint32_t y, uint32_t button, int action, int mods) {
+
 	if (!handleBackpackAccess(StateGame::instanceObj.player, x, y)) return original(self, x, y, button, action, mods);
+	
 	return true;
+
 }
-
-// Prevent player from doing bad stuff
-$hook(bool, InventoryManager, applyTransfer, InventoryManager::TransferAction action, std::unique_ptr<Item>& selectedSlot, std::unique_ptr<Item>& cursorSlot, Inventory* other) {
-
-	InventoryManager& actualInventoryManager = StateGame::instanceObj.player.inventoryManager; // self is bullshit, when taking stuff its nullptr lol
-
-	// How the fuck does this even work
-	if (
-		(// Dont put backpacks into other backpacks
-			(
-				( // Mouse swapping
-					actualInventoryManager.secondary != nullptr &&
-					actualInventoryManager.secondary->name == "backpackInventory" &&
-
-					actualInventoryManager.secondary != other &&
-					cursorSlot &&
-					dynamic_cast<ItemBackpack*>(cursorSlot.get())) ||
-				( // Moving
-
-					action == InventoryManager::ACTION_MOVE &&
-					selectedSlot &&
-					other->name == "backpackInventory" &&
-					dynamic_cast<ItemBackpack*>(selectedSlot.get())
-					)
-				)
-			) ||
-		(// Dont take an item that is an open backpack
-			actualInventoryManager.secondary != nullptr &&
-			selectedSlot &&
-			dynamic_cast<ItemBackpack*>(selectedSlot.get()) &&
-			(&dynamic_cast<ItemBackpack*>(selectedSlot.get())->inventory == actualInventoryManager.secondary ||
-				(
-					dynamic_cast<ItemBackpack*>(selectedSlot.get())->type == ItemBackpack::WORMHOLE &&
-					actualInventoryManager.secondary->name == "wormholeInventory"
-					)
-				)
-			)
-		)
-		return true;
-
-
-	return original(self, action, selectedSlot, cursorSlot, other);
-}
-
 //Init stuff
 
 void addRecipe(const std::string& resultName, int resultCount,
@@ -319,18 +269,9 @@ void initBlueprints() {
 		{ "type", "backpack" },
 		{ "baseAttributes", { { "type", i }, { "inventory", nlohmann::json::array() },{"isSolenoidEffectActive",false} } }
 	};
-
-	// Tools
-	for (auto tool : toolNames)
-		Item::blueprints[tool] =
-	{
-		{ "type", "tool" },
-		{ "baseAttributes", nlohmann::json::object()}
-	};
-
 }
 void initSounds() {
-	ItemBackpack::openSound = std::format("../../{}/assets/backpackOpen.ogg", fdm::getModPath(fdm::modID));
+	ItemBackpack::openSound = std::format("../../{}/assets/Sounds/backpackOpen.ogg", fdm::getModPath(fdm::modID));
 
 	if (!AudioManager::loadSound(ItemBackpack::openSound)) Console::printLine("Cannot load sound: ", ItemBackpack::openSound);
 }
