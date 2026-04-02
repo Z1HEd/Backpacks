@@ -1,0 +1,13 @@
+Adds 5 Types of backpacks, each crafted out of their respective Hyperfabric.
+Fabrics are crafted using a Spindle And Distaff (2 Sticks, 2 Hypersilk, 1 Rock), and backpacks are crafted using a Weaving Loom (3 Sticks, 2 Wood, 1 Iron Bar).
+Also adds a new material: Cosmic Bars, crafted from 2 Deadly Bars, 2 Solenoid Bars and 1 Midnight Wood.
+Hyperfabric is crafted from 2 Hypersilk and 1 Stick. All other hyperfabrics are crafted from 2 of the previous type plus 2 of its material (except Cosmic Hyperfabric - it only takes 1 Solenoid Hyperfabric and 2 Cosmic Bars).
+The types of backpacks are:
+- Backpack - 1/4 chest capacity
+- Refinforced Backpack - 1/2 chest
+- Deadly Backpack - 1 chest
+- Solenoid Backpack - 1.5 chest
+- Wormhole Backpack - 1 chest.
+Solenoid Backpack can be activated with RMB. It will then attract nearby items like Solenoid Collector. Also when activated all gathered items are automatically stored in it.
+Wormhole Backpack acts as an ender chest - one inventory per player. Losing it wont destroy its contents - craft a new one and it will link to the same inventory.
+Wormhole Backpack is the only backpack that can store other backpacks (except other Wormhole Backpacks).
