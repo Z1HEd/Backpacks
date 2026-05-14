@@ -4,6 +4,8 @@ Backpacks is a mod for 4D Miner 0.2.1.4 that adds 5 backpack variants with diffe
 
 Made using the [4DModding framework](https://github.com/4D-Modding/4D-Modding) and generated from the [official mod template](https://github.com/4D-Modding/4D-Mod-Template).
 
+Can also be used in multiplayer if installed on the server.
+
 ## Backpack types
 
 - Backpack (1/4 inventory)
