@@ -1,9 +1,21 @@
-# 4DMod Example
- This is a project example for making 4D Miner mods using the [4D-Modding](https://www.4d-modding.com/ "4D-Modding") framework.
- 
- For basic tutorials (like on how to start modding and on how to package the mod) you should check the [4dmodding-tutorials](https://github.com/4D-Modding/4dmodding-tutorials "4dmodding-tutorials") repo.
- More advanced tutorials are going to come later in a video format.
+# Backpacks
 
- You can also check out [4D-Fly Source-Code](https://github.com/4D-Modding/4DFly).
+Backpacks is a mod for 4D Miner 0.2.1.4 that adds 5 backpack variants with different storage sizes and utility features.
 
- Also if you are going to use this 4DMod Example, use it as a repo template instead of just `git clone`-ing it 
+Made using the [4DModding framework](https://github.com/4D-Modding/4D-Modding) and generated from the [official mod template](https://github.com/4D-Modding/4D-Mod-Template).
+
+## Backpack types
+
+- Backpack (1/4 inventory)
+- Reinforced Backpack (1/2 inventory)
+- Deadly Backpack (1 inventory)
+- Solenoid Backpack (1.5 inventory + toggleable item attraction)
+- Wormhole Backpack (1 inventory, shared persistent storage per player)
+
+## Crafting
+
+- Backpacks are crafted using the Weaving Loom
+- Each backpack tier has its own fabric type
+- Fabrics are made using the Spindle and Distaff
+- Cosmic Bars are used for the Wormhole Backpack
+- Each fabric tier is progressively more expensive
